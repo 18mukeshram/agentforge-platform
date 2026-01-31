@@ -11,11 +11,13 @@ from agentforge_api.models import (
     Node,
     Edge,
     WorkflowStatus,
+    ExecutionStatus,
+    NodeExecutionStatus,
     ValidationError,
 )
 
 
-# === Workflow DTOs ===
+# === Workflow DTOs (existing) ===
 
 
 class CreateWorkflowRequest(BaseModel):
@@ -75,3 +77,92 @@ class WorkflowDeleteResponse(BaseModel):
     
     id: str
     status: WorkflowStatus
+
+
+# === Execution DTOs (new) ===
+
+
+class ExecuteWorkflowRequest(BaseModel):
+    """Request body for triggering workflow execution."""
+    
+    inputs: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Input values for workflow entry nodes",
+    )
+
+
+class NodeExecutionStateResponse(BaseModel):
+    """Execution state for a single node."""
+    
+    node_id: str
+    status: NodeExecutionStatus
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    retry_count: int = 0
+    error: str | None = None
+    output: Any | None = None
+
+
+class ExecutionResponse(BaseModel):
+    """Full execution response."""
+    
+    id: str
+    workflow_id: str
+    status: ExecutionStatus
+    workflow_version: int
+    triggered_by: str
+    created_at: datetime
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    node_states: list[NodeExecutionStateResponse]
+    inputs: dict[str, Any]
+    outputs: dict[str, Any] | None = None
+
+
+class ExecutionSummary(BaseModel):
+    """Execution summary for list responses."""
+    
+    id: str
+    workflow_id: str
+    status: ExecutionStatus
+    created_at: datetime
+    completed_at: datetime | None = None
+
+
+class ExecutionListResponse(BaseModel):
+    """Response for execution list endpoint."""
+    
+    items: list[ExecutionSummary]
+    next_cursor: str | None = None
+
+
+class ExecutionTriggerResponse(BaseModel):
+    """Response when execution is triggered (202 Accepted)."""
+    
+    execution_id: str
+    status: ExecutionStatus
+    workflow_id: str
+    created_at: datetime
+
+
+class ExecutionCancelResponse(BaseModel):
+    """Response for execution cancellation."""
+    
+    id: str
+    status: ExecutionStatus
+
+
+class LogEntry(BaseModel):
+    """A single log entry from execution."""
+    
+    timestamp: datetime
+    node_id: str
+    level: str  # "info" | "warn" | "error"
+    message: str
+
+
+class ExecutionLogsResponse(BaseModel):
+    """Response for execution logs endpoint."""
+    
+    items: list[LogEntry]
+    next_cursor: str | None = None

@@ -27,6 +27,21 @@ from agentforge_api.models.execution import (
     NodeExecutionState,
     NodeExecutionStatus,
 )
+from agentforge_api.models.agent import (
+    AgentCategory,
+    AgentDefinition,
+    AgentId,
+    AgentInputSchema,
+    AgentOutputSchema,
+    DataType,
+    PortSchema,
+    RetryPolicy,
+)
+from agentforge_api.models.validation import (
+    ValidationError,
+    ValidationErrorCode,
+    ValidationResult,
+)
 
 __all__ = [
     # Node
@@ -50,4 +65,17 @@ __all__ = [
     "ExecutionStatus",
     "NodeExecutionState",
     "NodeExecutionStatus",
+    # Agent
+    "AgentCategory",
+    "AgentDefinition",
+    "AgentId",
+    "AgentInputSchema",
+    "AgentOutputSchema",
+    "DataType",
+    "PortSchema",
+    "RetryPolicy",
+    # Validation
+    "ValidationError",
+    "ValidationErrorCode",
+    "ValidationResult",
 ]

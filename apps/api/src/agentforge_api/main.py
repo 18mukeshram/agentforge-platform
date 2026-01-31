@@ -23,7 +23,9 @@ from agentforge_api.core.error_handlers import (
 from agentforge_api.routes import (
     workflows_router,
     validation_router,
+    executions_router,
 )
+from agentforge_api.services.orchestrator import orchestrator
 
 
 @asynccontextmanager
@@ -34,14 +36,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     Handles startup and shutdown events.
     """
     # Startup
-    # Future: initialize database connections, Redis, etc.
     print(f"Starting {settings.app_name} v{settings.app_version}")
+    
+    # Initialize orchestrator (starts queue worker)
+    await orchestrator.initialize()
+    print("Execution orchestrator initialized")
     
     yield
     
     # Shutdown
-    # Future: close database connections, cleanup resources
     print(f"Shutting down {settings.app_name}")
+    
+    # Shutdown orchestrator (stops queue worker)
+    await orchestrator.shutdown()
+    print("Execution orchestrator stopped")
 
 
 def create_app() -> FastAPI:
@@ -88,9 +96,24 @@ def create_app() -> FastAPI:
             "version": settings.app_version,
         }
     
+    # Ready check (includes dependencies)
+    @app.get("/ready", tags=["health"])
+    async def ready_check() -> dict:
+        """
+        Readiness check endpoint.
+        
+        Verifies all dependencies are available.
+        """
+        return {
+            "status": "ready",
+            "version": settings.app_version,
+            "orchestrator": "running" if orchestrator._initialized else "stopped",
+        }
+    
     # API routes
     app.include_router(workflows_router, prefix="/api/v1")
     app.include_router(validation_router, prefix="/api/v1")
+    app.include_router(executions_router, prefix="/api/v1")
     
     return app
 

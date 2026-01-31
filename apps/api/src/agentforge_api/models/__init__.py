@@ -42,6 +42,14 @@ from agentforge_api.models.validation import (
     ValidationErrorCode,
     ValidationResult,
 )
+from agentforge_api.models.job import (
+    ExecutionPlan,
+    JobId,
+    JobPriority,
+    JobResult,
+    JobStatus,
+    NodeJob,
+)
 
 __all__ = [
     # Node
@@ -78,4 +86,11 @@ __all__ = [
     "ValidationError",
     "ValidationErrorCode",
     "ValidationResult",
+    # Job
+    "ExecutionPlan",
+    "JobId",
+    "JobPriority",
+    "JobResult",
+    "JobStatus",
+    "NodeJob",
 ]

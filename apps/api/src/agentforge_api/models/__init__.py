@@ -14,6 +14,19 @@ from agentforge_api.models.edge import (
     EdgeId,
     PortId,
 )
+from agentforge_api.models.workflow import (
+    Workflow,
+    WorkflowId,
+    WorkflowMeta,
+    WorkflowStatus,
+)
+from agentforge_api.models.execution import (
+    Execution,
+    ExecutionId,
+    ExecutionStatus,
+    NodeExecutionState,
+    NodeExecutionStatus,
+)
 
 __all__ = [
     # Node
@@ -26,4 +39,15 @@ __all__ = [
     "Edge",
     "EdgeId",
     "PortId",
+    # Workflow
+    "Workflow",
+    "WorkflowId",
+    "WorkflowMeta",
+    "WorkflowStatus",
+    # Execution
+    "Execution",
+    "ExecutionId",
+    "ExecutionStatus",
+    "NodeExecutionState",
+    "NodeExecutionStatus",
 ]

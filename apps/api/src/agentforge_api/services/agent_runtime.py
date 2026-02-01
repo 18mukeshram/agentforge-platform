@@ -21,6 +21,11 @@ from agentforge_api.realtime import (
     node_running,
     log_emitted,
 )
+from agentforge_api.services.cache import (
+    CacheKey,
+    generate_cache_key,
+    result_cache,
+)
 
 
 class AgentRuntime:
@@ -32,6 +37,13 @@ class AgentRuntime:
     - Success/failure scenarios
     - Output generation
     - Real-time event emission
+    - Result caching
+    
+    Cache behavior:
+    - Cache checked ONLY on first attempt (retry_count == 0)
+    - Cache written ONLY on success
+    - Retries NEVER consult cache
+    - Cache failures NEVER break execution
     """
     
     def __init__(
@@ -39,19 +51,156 @@ class AgentRuntime:
         min_delay_ms: int = 100,
         max_delay_ms: int = 500,
         failure_rate: float = 0.0,  # 0.0 = never fail, 1.0 = always fail
+        cache_enabled: bool = True,
     ) -> None:
         self.min_delay_ms = min_delay_ms
         self.max_delay_ms = max_delay_ms
         self.failure_rate = failure_rate
+        self.cache_enabled = cache_enabled
     
     async def execute(self, job: NodeJob) -> JobResult:
         """
         Execute a node job.
         
-        Dispatches to appropriate handler based on node type.
+        Flow:
+        1. If first attempt and cacheable, check cache
+        2. If cache hit, return cached result immediately
+        3. If cache miss or retry, execute node
+        4. If success, write to cache
+        5. Return result
         """
         start_time = datetime.now(timezone.utc)
+        is_first_attempt = job.retry_count == 0
+        is_cacheable = self._is_cacheable(job)
+        cache_key: CacheKey | None = None
         
+        # === Cache Lookup (first attempt only) ===
+        if self.cache_enabled and is_first_attempt and is_cacheable:
+            cache_key = self._generate_cache_key(job)
+            cached_result = await self._check_cache(job, cache_key)
+            if cached_result is not None:
+                return cached_result
+        
+        # === Execute Node ===
+        result = await self._execute_node(job, start_time)
+        
+        # === Cache Write (success only) ===
+        if self.cache_enabled and result.success and is_cacheable and cache_key:
+            await self._write_cache(job, cache_key, result)
+        
+        return result
+    
+    def _is_cacheable(self, job: NodeJob) -> bool:
+        """
+        Determine if a job's output can be cached.
+        
+        Currently caches agent and tool nodes only.
+        Input/output nodes are pass-through and not cached.
+        """
+        try:
+            node_type = NodeType(job.node_type) if job.node_type else None
+            return node_type in (NodeType.AGENT, NodeType.TOOL)
+        except (ValueError, TypeError):
+            return False
+    
+    def _generate_cache_key(self, job: NodeJob) -> CacheKey:
+        """Generate cache key for a job."""
+        agent_id = job.agent_id or job.node_type or "unknown"
+        agent_version = job.node_config.get("version", "1.0.0")
+        
+        return generate_cache_key(
+            agent_id=agent_id,
+            inputs=job.inputs,
+            agent_version=str(agent_version),
+        )
+    
+    async def _check_cache(
+        self,
+        job: NodeJob,
+        cache_key: CacheKey,
+    ) -> JobResult | None:
+        """
+        Check cache for existing result.
+        
+        Returns JobResult if cache hit, None if miss.
+        Never raises exceptions.
+        """
+        try:
+            entry = result_cache.get(cache_key)
+            
+            if entry is None:
+                await self._emit_log(job, "info", "Cache miss - executing node")
+                return None
+            
+            # Cache hit - return cached result
+            await self._emit_log(
+                job,
+                "info",
+                f"Cache hit - returning cached result (originally took {entry.metadata.duration_ms}ms)",
+            )
+            
+            # Emit NODE_RUNNING event (brief, for cache hit)
+            await event_emitter.emit(node_running(
+                execution_id=job.execution_id,
+                node_id=job.node_id,
+                retry_count=0,
+            ))
+            
+            return JobResult(
+                job_id=job.id,
+                node_id=job.node_id,
+                execution_id=job.execution_id,
+                success=True,
+                output=entry.output,
+                duration_ms=0,  # Instant return from cache
+            )
+            
+        except Exception as e:
+            # Cache failures must never break execution
+            await self._emit_log(
+                job,
+                "warn",
+                f"Cache lookup failed, continuing with execution: {e}",
+            )
+            return None
+    
+    async def _write_cache(
+        self,
+        job: NodeJob,
+        cache_key: CacheKey,
+        result: JobResult,
+    ) -> None:
+        """
+        Write successful result to cache.
+        
+        Never raises exceptions.
+        """
+        try:
+            success = result_cache.set(
+                key=cache_key,
+                output=result.output,
+                duration_ms=result.duration_ms,
+            )
+            
+            if success:
+                await self._emit_log(job, "info", "Result cached for future executions")
+            else:
+                await self._emit_log(job, "warn", "Failed to cache result")
+                
+        except Exception as e:
+            # Cache failures must never break execution
+            await self._emit_log(job, "warn", f"Cache write failed: {e}")
+    
+    async def _execute_node(
+        self,
+        job: NodeJob,
+        start_time: datetime,
+    ) -> JobResult:
+        """
+        Execute the actual node logic.
+        
+        This is the core execution path, used on cache miss or retry.
+        """
         # Emit NODE_RUNNING event
         await event_emitter.emit(node_running(
             execution_id=job.execution_id,
@@ -60,11 +209,18 @@ class AgentRuntime:
         ))
         
         # Emit log for execution start
-        await self._emit_log(
-            job,
-            "info",
-            f"Starting execution (attempt {job.retry_count + 1})",
-        )
+        if job.retry_count > 0:
+            await self._emit_log(
+                job,
+                "info",
+                f"Retrying execution (attempt {job.retry_count + 1})",
+            )
+        else:
+            await self._emit_log(
+                job,
+                "info",
+                f"Starting execution",
+            )
         
         try:
             # Simulate processing time
@@ -238,6 +394,7 @@ agent_runtime = AgentRuntime(
     min_delay_ms=100,
     max_delay_ms=300,
     failure_rate=0.0,  # No failures by default
+    cache_enabled=True,
 )
 
 

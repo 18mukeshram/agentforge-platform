@@ -26,6 +26,10 @@ from agentforge_api.routes import (
     executions_router,
 )
 from agentforge_api.services.orchestrator import orchestrator
+from agentforge_api.realtime import (
+    websocket_router,
+    connection_hub,
+)
 
 
 @asynccontextmanager
@@ -37,6 +41,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """
     # Startup
     print(f"Starting {settings.app_name} v{settings.app_version}")
+    
+    # Initialize WebSocket hub
+    await connection_hub.initialize()
+    print("WebSocket hub initialized")
     
     # Initialize orchestrator (starts queue worker)
     await orchestrator.initialize()
@@ -50,6 +58,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Shutdown orchestrator (stops queue worker)
     await orchestrator.shutdown()
     print("Execution orchestrator stopped")
+    
+    # Shutdown WebSocket hub
+    await connection_hub.shutdown()
+    print("WebSocket hub stopped")
 
 
 def create_app() -> FastAPI:
@@ -108,12 +120,19 @@ def create_app() -> FastAPI:
             "status": "ready",
             "version": settings.app_version,
             "orchestrator": "running" if orchestrator._initialized else "stopped",
+            "websocket": {
+                "connections": connection_hub.connection_count,
+                "subscriptions": connection_hub.subscription_count,
+            },
         }
     
     # API routes
     app.include_router(workflows_router, prefix="/api/v1")
     app.include_router(validation_router, prefix="/api/v1")
     app.include_router(executions_router, prefix="/api/v1")
+    
+    # WebSocket routes (no prefix - /ws/executions)
+    app.include_router(websocket_router)
     
     return app
 

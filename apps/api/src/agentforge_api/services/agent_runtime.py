@@ -16,6 +16,11 @@ from agentforge_api.models import (
     JobResult,
     NodeType,
 )
+from agentforge_api.realtime import (
+    event_emitter,
+    node_running,
+    log_emitted,
+)
 
 
 class AgentRuntime:
@@ -26,6 +31,7 @@ class AgentRuntime:
     - Variable execution time
     - Success/failure scenarios
     - Output generation
+    - Real-time event emission
     """
     
     def __init__(
@@ -45,6 +51,20 @@ class AgentRuntime:
         Dispatches to appropriate handler based on node type.
         """
         start_time = datetime.now(timezone.utc)
+        
+        # Emit NODE_RUNNING event
+        await event_emitter.emit(node_running(
+            execution_id=job.execution_id,
+            node_id=job.node_id,
+            retry_count=job.retry_count,
+        ))
+        
+        # Emit log for execution start
+        await self._emit_log(
+            job,
+            "info",
+            f"Starting execution (attempt {job.retry_count + 1})",
+        )
         
         try:
             # Simulate processing time
@@ -72,6 +92,13 @@ class AgentRuntime:
             end_time = datetime.now(timezone.utc)
             duration_ms = int((end_time - start_time).total_seconds() * 1000)
             
+            # Emit success log
+            await self._emit_log(
+                job,
+                "info",
+                f"Execution completed in {duration_ms}ms",
+            )
+            
             return JobResult(
                 job_id=job.id,
                 node_id=job.node_id,
@@ -85,6 +112,13 @@ class AgentRuntime:
             end_time = datetime.now(timezone.utc)
             duration_ms = int((end_time - start_time).total_seconds() * 1000)
             
+            # Emit error log
+            await self._emit_log(
+                job,
+                "error",
+                f"Execution failed: {str(e)}",
+            )
+            
             return JobResult(
                 job_id=job.id,
                 node_id=job.node_id,
@@ -94,12 +128,28 @@ class AgentRuntime:
                 duration_ms=duration_ms,
             )
     
+    async def _emit_log(
+        self,
+        job: NodeJob,
+        level: str,
+        message: str,
+    ) -> None:
+        """Emit a log event."""
+        await event_emitter.emit(log_emitted(
+            execution_id=job.execution_id,
+            node_id=job.node_id,
+            level=level,
+            message=message,
+        ))
+    
     async def _execute_input_node(self, job: NodeJob) -> dict:
         """
         Execute an input node.
         
         Passes through the provided inputs.
         """
+        await self._emit_log(job, "info", "Processing input data")
+        
         return {
             "type": "input",
             "node_id": job.node_id,
@@ -112,6 +162,8 @@ class AgentRuntime:
         
         Collects and formats final outputs.
         """
+        await self._emit_log(job, "info", "Collecting output data")
+        
         return {
             "type": "output",
             "node_id": job.node_id,
@@ -126,7 +178,13 @@ class AgentRuntime:
         """
         agent_id = job.agent_id or "unknown"
         
+        await self._emit_log(job, "info", f"Invoking agent: {agent_id}")
+        
         # Simulate agent processing
+        await asyncio.sleep(0.05)  # Additional delay for "thinking"
+        
+        await self._emit_log(job, "info", "Agent response received")
+        
         return {
             "type": "agent",
             "node_id": job.node_id,
@@ -148,6 +206,8 @@ class AgentRuntime:
         """
         tool_id = job.node_config.get("tool_id", "unknown")
         
+        await self._emit_log(job, "info", f"Executing tool: {tool_id}")
+        
         return {
             "type": "tool",
             "node_id": job.node_id,
@@ -162,6 +222,8 @@ class AgentRuntime:
         
         Fallback handler.
         """
+        await self._emit_log(job, "warn", f"Unknown node type: {job.node_type}")
+        
         return {
             "type": "generic",
             "node_id": job.node_id,

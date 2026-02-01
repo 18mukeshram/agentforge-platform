@@ -3,68 +3,88 @@
 """
 WebSocket endpoint for real-time execution streaming.
 
-Handles client connections and message routing.
+Handles authenticated client connections and message routing.
 """
 
 import json
 from typing import Any
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 
 from agentforge_api.realtime.hub import connection_hub, Connection
+from agentforge_api.auth import AuthContext, create_auth_context
+from agentforge_api.core.exceptions import UnauthorizedError
 
 
 router = APIRouter()
 
 
 @router.websocket("/ws/executions")
-async def executions_websocket(websocket: WebSocket) -> None:
+async def executions_websocket(
+    websocket: WebSocket,
+    token: str | None = Query(default=None),
+) -> None:
     """
     WebSocket endpoint for execution event streaming.
     
-    Protocol:
-    - Client connects to /ws/executions
-    - Client sends: { "action": "subscribe", "executionId": "..." }
-    - Server sends: { "event": "ACK", "action": "subscribe", ... }
-    - Server pushes: { "event": "NODE_COMPLETED", "executionId": "...", ... }
-    - Client sends: { "action": "unsubscribe", "executionId": "..." }
-    - Client disconnects when done
+    Authentication:
+    - JWT token passed as query parameter: /ws/executions?token=<jwt>
+    - Verified once at connection time
+    - Connection rejected if token invalid or missing
     
-    Error handling:
-    - Invalid JSON: sends error, continues listening
-    - Invalid message format: sends error, continues listening
-    - Connection error: cleans up and exits
+    Protocol:
+    - Client connects with token
+    - Server sends: { "event": "CONNECTED", ... }
+    - Client sends: { "action": "subscribe", "executionId": "..." }
+    - Server validates tenant isolation before allowing subscription
+    - Server pushes: { "event": "NODE_COMPLETED", ... }
+    - Client sends: { "action": "unsubscribe", "executionId": "..." }
+    
+    Tenant Isolation:
+    - Subscriptions only allowed for executions in same tenant
+    - Cross-tenant subscriptions are rejected with error
     """
+    # === Authentication ===
+    if not token:
+        await websocket.close(code=4001, reason="Missing authentication token")
+        return
+    
+    try:
+        auth = create_auth_context(token)
+    except UnauthorizedError as e:
+        await websocket.close(code=4001, reason=str(e))
+        return
+    
+    # === Connection Setup ===
     connection: Connection | None = None
     
     try:
-        # Accept connection and register with hub
-        connection = await connection_hub.connect(websocket)
+        connection = await connection_hub.connect(websocket, auth)
         
-        # Send welcome message
+        # Send welcome message with auth info
         await websocket.send_json({
             "event": "CONNECTED",
             "connectionId": connection.id,
+            "userId": auth.user_id,
+            "tenantId": auth.tenant_id,
+            "role": auth.role.value,
             "message": "Connected to AgentForge execution stream",
         })
         
-        # Message loop
+        # === Message Loop ===
         while True:
             try:
-                # Receive message from client
                 raw_data = await websocket.receive_text()
                 
-                # Parse JSON
                 try:
                     data = json.loads(raw_data)
                 except json.JSONDecodeError:
                     await connection.send_error(
                         "Invalid JSON",
-                        {"received": raw_data[:100]}  # Truncate for safety
+                        {"received": raw_data[:100]}
                     )
                     continue
                 
-                # Validate message is a dict
                 if not isinstance(data, dict):
                     await connection.send_error(
                         "Message must be a JSON object",
@@ -72,25 +92,20 @@ async def executions_websocket(websocket: WebSocket) -> None:
                     )
                     continue
                 
-                # Handle message
                 await connection_hub.handle_message(connection, data)
                 
             except WebSocketDisconnect:
-                # Client disconnected normally
                 break
             except Exception as e:
-                # Unexpected error during message handling
                 try:
                     await connection.send_error(
                         "Internal error processing message",
                         {"error": str(e)}
                     )
                 except Exception:
-                    # Can't even send error, connection is dead
                     break
     
     finally:
-        # Clean up connection
         if connection:
             await connection_hub.disconnect(connection)
 

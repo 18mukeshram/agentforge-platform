@@ -48,6 +48,7 @@ from agentforge_api.realtime import (
     node_completed,
     node_failed,
     node_skipped,
+    connection_hub,
 )
 
 
@@ -61,7 +62,7 @@ class ExecutionOrchestrator:
     
     def __init__(self) -> None:
         self._plans: dict[str, ExecutionPlan] = {}
-        self._start_times: dict[str, datetime] = {}  # Track execution start times
+        self._start_times: dict[str, datetime] = {}
         self._initialized = False
     
     async def initialize(self) -> None:
@@ -73,7 +74,6 @@ class ExecutionOrchestrator:
         if self._initialized:
             return
         
-        # Import here to avoid circular dependency
         from agentforge_api.services.agent_runtime import process_node_job
         
         job_queue.set_processor(process_node_job)
@@ -88,20 +88,13 @@ class ExecutionOrchestrator:
         self._initialized = False
     
     def generate_plan(self, workflow: Workflow, execution_id: str) -> ExecutionPlan:
-        """
-        Generate an execution plan for a workflow.
-        
-        Computes topological order and dependency maps.
-        """
-        # Get execution order
+        """Generate an execution plan for a workflow."""
         execution_order = get_execution_order(workflow)
         
-        # Build dependency maps
         adj = build_adjacency_list(workflow)
         rev_adj = build_reverse_adjacency_list(workflow)
         edge_map = workflow.get_edge_map()
         
-        # dependencies: node_id -> parent node_ids
         dependencies: dict[str, list[str]] = {}
         for node in workflow.nodes:
             incoming_edges = rev_adj.get(node.id, [])
@@ -112,7 +105,6 @@ class ExecutionOrchestrator:
                     parent_ids.append(edge.source)
             dependencies[node.id] = parent_ids
         
-        # dependents: node_id -> child node_ids
         dependents: dict[str, list[str]] = {}
         for node in workflow.nodes:
             outgoing_edges = adj.get(node.id, [])
@@ -123,7 +115,6 @@ class ExecutionOrchestrator:
                     child_ids.append(edge.target)
             dependents[node.id] = child_ids
         
-        # Entry and exit nodes
         entry_nodes = find_entry_nodes(workflow)
         exit_nodes = find_exit_nodes(workflow)
         
@@ -172,6 +163,11 @@ class ExecutionOrchestrator:
         # Track start time
         self._start_times[execution.id] = datetime.now(timezone.utc)
         
+        # Register execution tenant with WebSocket hub
+        tenant_id = execution_service.get_tenant_id(execution.id)
+        if tenant_id:
+            connection_hub.register_execution_tenant(execution.id, tenant_id)
+        
         # Update execution status to RUNNING
         execution_service.update_status(execution.id, ExecutionStatus.RUNNING)
         
@@ -190,7 +186,6 @@ class ExecutionOrchestrator:
             if node is None:
                 continue
             
-            # Entry nodes get inputs from execution inputs
             node_inputs = self._resolve_entry_inputs(
                 node_id=node_id,
                 execution=execution,
@@ -204,14 +199,12 @@ class ExecutionOrchestrator:
                 inputs=node_inputs,
             )
             
-            # Update node state to QUEUED
             execution_service.update_node_state(
                 execution_id=execution.id,
                 node_id=node_id,
                 status=NodeExecutionStatus.QUEUED,
             )
             
-            # Emit NODE_QUEUED event
             await event_emitter.emit(node_queued(
                 execution_id=execution.id,
                 node_id=node_id,
@@ -222,20 +215,14 @@ class ExecutionOrchestrator:
         return plan
     
     async def _on_job_completed(self, result: JobResult) -> None:
-        """
-        Handle job completion.
-        
-        Updates node state and dispatches dependent jobs if ready.
-        """
+        """Handle job completion."""
         execution_id = result.execution_id
         node_id = result.node_id
         
-        # Get the job for retry count
         job = await job_queue.get_job(result.job_id)
         retry_count = job.retry_count if job else 0
         
         if result.success:
-            # Update node state to COMPLETED
             execution_service.update_node_state(
                 execution_id=execution_id,
                 node_id=node_id,
@@ -244,7 +231,6 @@ class ExecutionOrchestrator:
                 retry_count=retry_count,
             )
             
-            # Emit NODE_COMPLETED event
             output_summary = None
             if isinstance(result.output, dict):
                 output_summary = str(result.output.get("result", ""))[:100]
@@ -255,10 +241,8 @@ class ExecutionOrchestrator:
                 output_summary=output_summary,
             ))
             
-            # Dispatch dependent jobs
             await self._dispatch_dependents(execution_id, node_id)
         else:
-            # Update node state to FAILED
             execution_service.update_node_state(
                 execution_id=execution_id,
                 node_id=node_id,
@@ -267,19 +251,16 @@ class ExecutionOrchestrator:
                 retry_count=retry_count,
             )
             
-            # Emit NODE_FAILED event
             await event_emitter.emit(node_failed(
                 execution_id=execution_id,
                 node_id=node_id,
                 error=result.error or "Unknown error",
                 retry_count=retry_count,
-                will_retry=False,  # Retries handled by queue
+                will_retry=False,
             ))
             
-            # Skip all descendants (invariant E2)
             await self._skip_descendants(execution_id, node_id)
         
-        # Check if execution is complete
         await self._check_execution_complete(execution_id)
     
     async def _dispatch_dependents(
@@ -296,7 +277,6 @@ class ExecutionOrchestrator:
         if execution is None:
             return
         
-        # Get workflow from execution
         from agentforge_api.services.workflow_service import workflow_service
         try:
             workflow = workflow_service._workflows.get(execution.workflow_id)
@@ -309,17 +289,14 @@ class ExecutionOrchestrator:
         node_map = workflow.get_node_map()
         state_map = execution.get_node_state_map()
         
-        # Check each dependent of the completed node
         dependent_ids = plan.dependents.get(completed_node_id, [])
         
         for dep_id in dependent_ids:
             dep_state = state_map.get(dep_id)
             
-            # Skip if already processed
             if dep_state and dep_state.status != NodeExecutionStatus.PENDING:
                 continue
             
-            # Check if all dependencies are completed
             dep_dependencies = plan.dependencies.get(dep_id, [])
             all_deps_complete = all(
                 state_map.get(d) and state_map.get(d).status == NodeExecutionStatus.COMPLETED
@@ -329,12 +306,10 @@ class ExecutionOrchestrator:
             if not all_deps_complete:
                 continue
             
-            # All dependencies complete, dispatch this node
             node = node_map.get(dep_id)
             if node is None:
                 continue
             
-            # Resolve inputs from parent outputs
             node_inputs = self._resolve_node_inputs(
                 node_id=dep_id,
                 execution_id=execution_id,
@@ -348,14 +323,12 @@ class ExecutionOrchestrator:
                 inputs=node_inputs,
             )
             
-            # Update node state to QUEUED
             execution_service.update_node_state(
                 execution_id=execution_id,
                 node_id=dep_id,
                 status=NodeExecutionStatus.QUEUED,
             )
             
-            # Emit NODE_QUEUED event
             await event_emitter.emit(node_queued(
                 execution_id=execution_id,
                 node_id=dep_id,
@@ -368,12 +341,11 @@ class ExecutionOrchestrator:
         execution_id: str,
         failed_node_id: str,
     ) -> None:
-        """Skip all descendants of a failed node (invariant E2)."""
+        """Skip all descendants of a failed node."""
         plan = self._plans.get(execution_id)
         if plan is None:
             return
         
-        # BFS to find all descendants
         to_skip: set[str] = set()
         queue = list(plan.dependents.get(failed_node_id, []))
         
@@ -384,7 +356,6 @@ class ExecutionOrchestrator:
             to_skip.add(node_id)
             queue.extend(plan.dependents.get(node_id, []))
         
-        # Mark all as skipped
         for node_id in to_skip:
             reason = f"Skipped due to upstream failure: {failed_node_id}"
             
@@ -395,7 +366,6 @@ class ExecutionOrchestrator:
                 error=reason,
             )
             
-            # Emit NODE_SKIPPED event
             await event_emitter.emit(node_skipped(
                 execution_id=execution_id,
                 node_id=node_id,
@@ -410,7 +380,6 @@ class ExecutionOrchestrator:
         if current and current.status != aggregate_status:
             execution_service.update_status(execution_id, aggregate_status)
             
-            # Emit appropriate completion event
             if aggregate_status == ExecutionStatus.COMPLETED:
                 duration_ms = self._compute_duration(execution_id)
                 await event_emitter.emit(execution_completed(
@@ -428,7 +397,6 @@ class ExecutionOrchestrator:
     
     async def cancel_execution(self, execution_id: str) -> None:
         """Cancel an execution and emit event."""
-        # Emit EXECUTION_CANCELLED event
         await event_emitter.emit(execution_cancelled(
             execution_id=execution_id,
         ))
@@ -459,6 +427,9 @@ class ExecutionOrchestrator:
         node_map = workflow.get_node_map()
         node = node_map.get(node_id)
         
+        # Get tenant_id for the job
+        tenant_id = execution_service.get_tenant_id(execution.id) or ""
+        
         return NodeJob(
             id=str(uuid4()),
             execution_id=execution.id,
@@ -471,6 +442,7 @@ class ExecutionOrchestrator:
             created_at=datetime.now(timezone.utc),
             max_retries=3,
             retry_backoff_ms=1000,
+            tenant_id=tenant_id,  # Include tenant for cache isolation
         )
     
     def _resolve_entry_inputs(
@@ -480,8 +452,6 @@ class ExecutionOrchestrator:
         workflow: Workflow,
     ) -> dict:
         """Resolve inputs for entry nodes from execution inputs."""
-        # For now, pass all execution inputs to entry nodes
-        # Future: map specific inputs to specific entry nodes
         return dict(execution.inputs)
     
     def _resolve_node_inputs(
@@ -502,8 +472,6 @@ class ExecutionOrchestrator:
             )
             
             if parent_output is not None:
-                # Use parent node ID as input key
-                # Future: map based on edge port connections
                 inputs[parent_id] = parent_output
         
         return inputs

@@ -1,8 +1,8 @@
 # apps/api/src/agentforge_api/routes/executions.py
 
-"""Execution routes for workflow execution management."""
+"""Execution routes with authentication and tenant isolation."""
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Depends
 
 from agentforge_api.models import (
     WorkflowStatus,
@@ -12,6 +12,13 @@ from agentforge_api.models import (
 from agentforge_api.core.exceptions import (
     WorkflowArchivedError,
     WorkflowInvalidError,
+    ForbiddenError,
+)
+from agentforge_api.auth import (
+    Auth,
+    Role,
+    require_role,
+    require_write_access,
 )
 from agentforge_api.services.workflow_service import workflow_service
 from agentforge_api.services.execution_service import execution_service
@@ -31,20 +38,14 @@ from agentforge_api.routes.dto import (
 
 router = APIRouter(prefix="/executions", tags=["executions"])
 
-# Placeholder owner ID until auth is implemented
-TEMP_OWNER_ID = "user_001"
-
 
 def execution_to_response(execution) -> ExecutionResponse:
     """Convert Execution model to response DTO."""
-    # Compute outputs from exit nodes if completed
     outputs = None
     if execution.status == ExecutionStatus.COMPLETED:
         outputs = {}
         for state in execution.node_states:
             if state.status == NodeExecutionStatus.COMPLETED and state.output:
-                # Include all completed node outputs
-                # Future: filter to only output nodes
                 outputs[state.node_id] = state.output
     
     return ExecutionResponse(
@@ -78,39 +79,42 @@ def execution_to_response(execution) -> ExecutionResponse:
     status_code=202,
     response_model=ExecutionTriggerResponse,
     tags=["workflows"],
+    dependencies=[Depends(require_write_access)],
 )
 async def execute_workflow(
     workflow_id: str,
     request: ExecuteWorkflowRequest,
+    auth: Auth,
 ) -> ExecutionTriggerResponse:
     """
     Trigger workflow execution.
     
+    Requires: MEMBER, ADMIN, or OWNER role.
     Validates workflow, creates execution record, and dispatches jobs.
     Returns immediately with execution ID (async execution).
+    Enforces tenant isolation.
     """
-    # Get workflow
-    workflow = workflow_service.get(workflow_id, TEMP_OWNER_ID)
+    # Get workflow (enforces tenant isolation)
+    workflow = workflow_service.get(workflow_id, auth.tenant_id)
     
-    # Check if archived
     if workflow.status == WorkflowStatus.ARCHIVED:
         raise WorkflowArchivedError(workflow_id)
     
     # Initialize orchestrator if needed
     await orchestrator.initialize()
     
-    # Create execution record
+    # Create execution record with tenant context
     execution = execution_service.create(
         workflow=workflow,
         inputs=request.inputs,
-        triggered_by=TEMP_OWNER_ID,
+        triggered_by=auth.user_id,
+        tenant_id=auth.tenant_id,
     )
     
-    # Start execution (validates, generates plan, dispatches jobs)
+    # Start execution
     try:
         await orchestrator.start_execution(workflow, execution)
     except WorkflowInvalidError:
-        # Update execution to failed if validation fails
         execution_service.update_status(execution.id, ExecutionStatus.FAILED)
         raise
     
@@ -123,18 +127,24 @@ async def execute_workflow(
 
 
 @router.get("/{execution_id}", response_model=ExecutionResponse)
-async def get_execution(execution_id: str) -> ExecutionResponse:
+async def get_execution(
+    execution_id: str,
+    auth: Auth,
+) -> ExecutionResponse:
     """
     Get execution status and details.
     
+    Requires: Any authenticated role (VIEWER+).
     Returns full execution state including all node states.
+    Enforces tenant isolation.
     """
-    execution = execution_service.get(execution_id, TEMP_OWNER_ID)
+    execution = execution_service.get(execution_id, auth.tenant_id)
     return execution_to_response(execution)
 
 
 @router.get("", response_model=ExecutionListResponse)
 async def list_executions(
+    auth: Auth,
     workflow_id: str = Query(..., description="Filter by workflow ID"),
     limit: int = Query(default=20, ge=1, le=100),
     cursor: str | None = Query(default=None),
@@ -142,11 +152,16 @@ async def list_executions(
     """
     List executions for a workflow.
     
+    Requires: Any authenticated role (VIEWER+).
     Supports cursor-based pagination.
+    Enforces tenant isolation.
     """
+    # Verify workflow belongs to tenant
+    workflow_service.get(workflow_id, auth.tenant_id)
+    
     executions, next_cursor = execution_service.list_by_workflow(
         workflow_id=workflow_id,
-        owner_id=TEMP_OWNER_ID,
+        tenant_id=auth.tenant_id,
         limit=limit,
         cursor=cursor,
     )
@@ -169,31 +184,36 @@ async def list_executions(
     "/{execution_id}/cancel",
     status_code=202,
     response_model=ExecutionCancelResponse,
+    dependencies=[Depends(require_write_access)],
 )
-async def cancel_execution(execution_id: str) -> ExecutionCancelResponse:
+async def cancel_execution(
+    execution_id: str,
+    auth: Auth,
+) -> ExecutionCancelResponse:
     """
     Cancel a running execution.
     
+    Requires: MEMBER, ADMIN, or OWNER role.
     Cancels pending jobs and marks execution as cancelled.
     Already-running nodes may complete.
+    Enforces tenant isolation.
     """
     from agentforge_api.services.queue import job_queue
     
-    # Get execution to verify it exists and is owned
-    execution = execution_service.get(execution_id, TEMP_OWNER_ID)
+    # Get execution (enforces tenant isolation)
+    execution = execution_service.get(execution_id, auth.tenant_id)
     
-    # Check if can be cancelled
     if execution.status not in (ExecutionStatus.PENDING, ExecutionStatus.RUNNING):
         return ExecutionCancelResponse(
             id=execution.id,
             status=execution.status,
         )
     
-    # Cancel all pending jobs in queue
+    # Cancel all pending jobs
     await job_queue.cancel_execution(execution_id)
     
     # Update execution status
-    updated = execution_service.cancel(execution_id, TEMP_OWNER_ID)
+    updated = execution_service.cancel(execution_id, auth.tenant_id)
     
     # Mark pending nodes as skipped
     for state in execution.node_states:
@@ -217,6 +237,7 @@ async def cancel_execution(execution_id: str) -> ExecutionCancelResponse:
 @router.get("/{execution_id}/logs", response_model=ExecutionLogsResponse)
 async def get_execution_logs(
     execution_id: str,
+    auth: Auth,
     node_id: str | None = Query(default=None, description="Filter by node ID"),
     level: str | None = Query(default=None, description="Filter by level"),
     limit: int = Query(default=100, ge=1, le=500),
@@ -225,27 +246,24 @@ async def get_execution_logs(
     """
     Get execution logs.
     
-    Mock implementation for Phase 5.
-    Real logging will be implemented with structured log storage.
+    Requires: Any authenticated role (VIEWER+).
+    Enforces tenant isolation.
     """
-    # Verify execution exists
-    execution = execution_service.get(execution_id, TEMP_OWNER_ID)
+    # Verify execution belongs to tenant
+    execution = execution_service.get(execution_id, auth.tenant_id)
     
-    # Generate mock logs from node states
     logs: list[LogEntry] = []
     
     for state in execution.node_states:
-        # Filter by node_id if specified
         if node_id and state.node_id != node_id:
             continue
         
-        # Add state transition logs
         if state.started_at:
             log_entry = LogEntry(
                 timestamp=state.started_at,
                 node_id=state.node_id,
                 level="info",
-                message=f"Node started execution",
+                message="Node started execution",
             )
             if not level or level == "info":
                 logs.append(log_entry)
@@ -256,7 +274,7 @@ async def get_execution_logs(
                     timestamp=state.completed_at,
                     node_id=state.node_id,
                     level="info",
-                    message=f"Node completed successfully",
+                    message="Node completed successfully",
                 )
                 if not level or level == "info":
                     logs.append(log_entry)
@@ -279,13 +297,10 @@ async def get_execution_logs(
                 if not level or level == "warn":
                     logs.append(log_entry)
     
-    # Sort by timestamp
     logs.sort(key=lambda l: l.timestamp)
-    
-    # Apply limit (simplified - no real cursor pagination)
     logs = logs[:limit]
     
     return ExecutionLogsResponse(
         items=logs,
-        next_cursor=None,  # Simplified for mock
+        next_cursor=None,
     )

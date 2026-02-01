@@ -4,6 +4,7 @@
 Execution service for managing workflow executions.
 
 Uses in-memory storage for now. Will be replaced with PostgreSQL.
+All operations enforce tenant isolation.
 """
 
 from datetime import datetime, timezone
@@ -27,16 +28,19 @@ class ExecutionService:
     
     Handles creation, status tracking, and lifecycle management.
     In-memory implementation for Phase 5.
+    All operations enforce tenant isolation.
     """
     
     def __init__(self) -> None:
         self._executions: dict[str, Execution] = {}
+        self._execution_tenants: dict[str, str] = {}  # execution_id -> tenant_id
     
     def create(
         self,
         workflow: Workflow,
         inputs: dict,
         triggered_by: str,
+        tenant_id: str,
     ) -> Execution:
         """
         Create a new execution for a workflow.
@@ -46,7 +50,6 @@ class ExecutionService:
         execution_id = str(uuid4())
         now = datetime.now(timezone.utc)
         
-        # Initialize node states
         node_states = [
             NodeExecutionState(
                 node_id=node.id,
@@ -67,28 +70,34 @@ class ExecutionService:
         )
         
         self._executions[execution_id] = execution
+        self._execution_tenants[execution_id] = tenant_id
+        
         return execution
     
-    def get(self, execution_id: str, owner_id: str) -> Execution:
+    def get(self, execution_id: str, tenant_id: str) -> Execution:
         """
         Get an execution by ID.
         
-        Raises ExecutionNotFoundError if not found.
-        Note: owner_id check will be implemented with proper auth.
+        Raises ExecutionNotFoundError if not found or wrong tenant.
+        Enforces tenant isolation.
         """
         execution = self._executions.get(execution_id)
+        stored_tenant = self._execution_tenants.get(execution_id)
         
-        if execution is None:
+        # Check existence AND tenant match
+        if execution is None or stored_tenant != tenant_id:
             raise ExecutionNotFoundError(execution_id)
         
-        # TODO: Verify owner_id matches workflow owner
-        
         return execution
+    
+    def get_tenant_id(self, execution_id: str) -> str | None:
+        """Get the tenant ID for an execution."""
+        return self._execution_tenants.get(execution_id)
     
     def list_by_workflow(
         self,
         workflow_id: str,
-        owner_id: str,
+        tenant_id: str,
         limit: int = 20,
         cursor: str | None = None,
     ) -> tuple[list[Execution], str | None]:
@@ -96,11 +105,13 @@ class ExecutionService:
         List executions for a workflow.
         
         Returns (executions, next_cursor).
+        Enforces tenant isolation.
         """
-        # Filter by workflow
+        # Filter by workflow and tenant
         executions = [
             e for e in self._executions.values()
             if e.workflow_id == workflow_id
+            and self._execution_tenants.get(e.id) == tenant_id
         ]
         
         # Sort by created_at descending
@@ -131,14 +142,13 @@ class ExecutionService:
         execution_id: str,
         status: ExecutionStatus,
     ) -> Execution:
-        """Update execution status."""
+        """Update execution status (internal use, no tenant check)."""
         execution = self._executions.get(execution_id)
         if execution is None:
             raise ExecutionNotFoundError(execution_id)
         
         now = datetime.now(timezone.utc)
         
-        # Determine timing updates
         started_at = execution.started_at
         completed_at = execution.completed_at
         
@@ -177,18 +187,16 @@ class ExecutionService:
         error: str | None = None,
         retry_count: int | None = None,
     ) -> Execution:
-        """Update a single node's execution state."""
+        """Update a single node's execution state (internal use)."""
         execution = self._executions.get(execution_id)
         if execution is None:
             raise ExecutionNotFoundError(execution_id)
         
         now = datetime.now(timezone.utc)
         
-        # Build updated node states
         updated_node_states = []
         for state in execution.node_states:
             if state.node_id == node_id:
-                # Update this node
                 started_at = state.started_at
                 completed_at = state.completed_at
                 
@@ -231,33 +239,25 @@ class ExecutionService:
         self._executions[execution_id] = updated
         return updated
     
-    def cancel(self, execution_id: str, owner_id: str) -> Execution:
+    def cancel(self, execution_id: str, tenant_id: str) -> Execution:
         """
         Cancel an execution.
         
         Only pending or running executions can be cancelled.
+        Enforces tenant isolation.
         """
-        execution = self.get(execution_id, owner_id)
+        execution = self.get(execution_id, tenant_id)
         
         if execution.status not in (
             ExecutionStatus.PENDING,
             ExecutionStatus.RUNNING,
         ):
-            # Already completed, nothing to cancel
             return execution
         
         return self.update_status(execution_id, ExecutionStatus.CANCELLED)
     
     def compute_aggregate_status(self, execution_id: str) -> ExecutionStatus:
-        """
-        Compute aggregate execution status from node states.
-        
-        Rules:
-        - If any node is RUNNING: RUNNING
-        - If any node is FAILED: FAILED
-        - If any node is PENDING/QUEUED: RUNNING (still in progress)
-        - If all nodes COMPLETED/SKIPPED: COMPLETED
-        """
+        """Compute aggregate execution status from node states."""
         execution = self._executions.get(execution_id)
         if execution is None:
             raise ExecutionNotFoundError(execution_id)
@@ -280,7 +280,7 @@ class ExecutionService:
         if has_running:
             return ExecutionStatus.RUNNING
         if has_pending:
-            return ExecutionStatus.RUNNING  # Still processing
+            return ExecutionStatus.RUNNING
         if has_failed:
             return ExecutionStatus.FAILED
         

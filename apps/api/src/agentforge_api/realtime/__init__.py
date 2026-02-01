@@ -26,6 +26,9 @@ from agentforge_api.realtime.hub import (
     ConnectionHub,
     connection_hub,
 )
+from agentforge_api.realtime.websocket import (
+    router as websocket_router,
+)
 
 __all__ = [
     # Event types
@@ -50,4 +53,6 @@ __all__ = [
     "Connection",
     "ConnectionHub",
     "connection_hub",
+    # WebSocket router
+    "websocket_router",
 ]

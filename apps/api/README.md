@@ -22,7 +22,6 @@ The AgentForge API is a FastAPI-based backend that provides:
 
 ### Local Development
 
-````bash
 # Navigate to API directory
 cd apps/api
 
@@ -39,22 +38,23 @@ export AGENTFORGE_DEBUG="true"
 
 # Run the server
 uvicorn agentforge_api.main:app --reload --port 8000
-Verify Installation
-Bash
 
+# Verify Installation
+Bash
 # Health check
 curl http://localhost:8000/health
 
 # Ready check
 curl http://localhost:8000/ready
-API Documentation
+
+### API Documentation
 When running locally, access:
 
 Swagger UI: http://localhost:8000/docs
 ReDoc: http://localhost:8000/redoc
 OpenAPI JSON: http://localhost:8000/openapi.json
-Project Structure
-text
+
+### Project Structure
 
 apps/api/
 ├── src/agentforge_api/
@@ -69,14 +69,17 @@ apps/api/
 ├── tests/              # Test suite
 ├── Dockerfile          # Production container
 └── pyproject.toml      # Dependencies & config
-Environment Variables
+
+### Environment Variables
+
 Variable	Required	Default	Description
 AGENTFORGE_JWT_SECRET	Yes	-	Secret key for JWT signing
 AGENTFORGE_DEBUG	No	false	Enable debug mode
 AGENTFORGE_HOST	No	0.0.0.0	Server bind host
 AGENTFORGE_PORT	No	8000	Server bind port
 AGENTFORGE_CORS_ORIGINS	No	http://localhost:3000	Allowed CORS origins
-Testing
+
+### Testing
 Bash
 
 # Run all tests
@@ -108,10 +111,8 @@ docker build -t agentforge-api .
 docker run -p 8000:8000 \
   -e AGENTFORGE_JWT_SECRET=your-secret \
   agentforge-api
-text
 
 
-```markdown
 # README.md
 
 # AgentForge
@@ -146,8 +147,6 @@ AgentForge enables users to build complex AI agent workflows as Directed Acyclic
 │ (persistent) │ │ (cache) │ │ (queues) │
 └───────────────┘ └───────────────┘ └───────────────┘
 
-text
-
 
 ## Quick Start
 
@@ -159,7 +158,6 @@ text
 
 ### Using Docker Compose
 
-```bash
 # Clone the repository
 git clone https://github.com/your-org/agentforge.git
 cd agentforge
@@ -177,7 +175,8 @@ docker compose up
 # - Web UI: http://localhost:3000
 # - API: http://localhost:8000
 # - API Docs: http://localhost:8000/docs
-Stop Services
+
+# Stop Services
 Bash
 
 # Stop and remove containers
@@ -185,8 +184,8 @@ docker compose down
 
 # Stop and remove volumes (clean slate)
 docker compose down -v
-Project Structure
-text
+
+### Project Structure
 
 agentforge/
 ├── apps/
@@ -204,11 +203,14 @@ agentforge/
 ├── docker-compose.yml       # Local development stack
 ├── .env.example             # Environment template
 └── README.md
-Environment Configuration
-Required Variables
+
+## Environment Configuration
+
+# Required Variables
 Variable	Description
 JWT_SECRET	Secret key for JWT token signing
-Optional Variables
+
+# Optional Variables
 Variable	Default	Description
 API_PORT	8000	Backend API port
 WEB_PORT	3000	Frontend port
@@ -216,7 +218,8 @@ API_DEBUG	false	Enable debug mode
 CORS_ORIGINS	http://localhost:3000	Allowed CORS origins
 NEXT_PUBLIC_API_URL	http://localhost:8000	API URL for frontend
 NEXT_PUBLIC_WS_URL	ws://localhost:8000	WebSocket URL for frontend
-Generate JWT Secret
+
+# Generate JWT Secret
 Bash
 
 # Using OpenSSL
@@ -224,8 +227,10 @@ openssl rand -base64 32
 
 # Using Python
 python -c "import secrets; print(secrets.token_urlsafe(32))"
-Development
-Backend (API)
+
+# Development
+
+# Backend (API)
 Bash
 
 cd apps/api
@@ -245,7 +250,8 @@ pytest
 
 # Lint code
 ruff check src/ tests/
-Frontend (Web)
+
+# Frontend (Web)
 Bash
 
 cd apps/web
@@ -261,12 +267,14 @@ npm run build
 
 # Lint code
 npm run lint
-API Endpoints
-Health & Readiness
+
+# API Endpoints
+# Health & Readiness
 Endpoint	Description
 GET /health	Basic health check
 GET /ready	Readiness with dependency status
-Workflows
+
+# Workflows
 Endpoint	Method	Description
 /api/v1/workflows	GET	List workflows
 /api/v1/workflows	POST	Create workflow
@@ -274,17 +282,20 @@ Endpoint	Method	Description
 /api/v1/workflows/{id}	PUT	Update workflow
 /api/v1/workflows/{id}	DELETE	Archive workflow
 /api/v1/workflows/{id}/validate	POST	Validate workflow
-Executions
+
+# Executions
 Endpoint	Method	Description
 /api/v1/executions	GET	List executions
 /api/v1/executions/{id}	GET	Get execution status
 /api/v1/executions/{id}/cancel	POST	Cancel execution
 /api/v1/executions/{id}/logs	GET	Get execution logs
 /api/v1/executions/workflows/{id}/execute	POST	Trigger execution
-WebSocket
+
+# WebSocket
 Endpoint	Description
 /ws/executions?token=<jwt>	Real-time execution events
-Authentication
+
+# Authentication
 AgentForge uses JWT-based authentication:
 
 Bash
@@ -294,13 +305,15 @@ curl -H "Authorization: Bearer <token>" http://localhost:8000/api/v1/workflows
 
 # WebSocket authentication via query parameter
 wscat -c "ws://localhost:8000/ws/executions?token=<token>"
-Roles
+
+# Roles
 Role	Permissions
 OWNER	Full access (tenant admin)
 ADMIN	Manage workflows & executions
 MEMBER	Create, edit, execute workflows
 VIEWER	Read-only access
-CI/CD
+
+# CI/CD
 GitHub Actions pipeline runs on push to main and pull requests:
 
 Lint & Test: Python (Ruff, MyPy, Pytest) and Node.js (ESLint, TypeScript)
@@ -308,7 +321,7 @@ Build: Docker images for API and Web
 Smoke Test: Container health checks
 View workflow runs at: .github/workflows/ci.yml
 
-Docker Images
+# Docker Images
 Build Locally
 Bash
 
@@ -329,7 +342,8 @@ docker run -p 8000:8000 \
 
 # Run Web
 docker run -p 3000:3000 agentforge-web
-Troubleshooting
+
+# Troubleshooting
 Container won't start
 Bash
 
@@ -352,10 +366,11 @@ WebSocket connection issues
 Verify NEXT_PUBLIC_WS_URL is set correctly
 Check CORS configuration
 Ensure JWT token is valid
-License
+
+# License
 MIT License - see LICENSE for details.
 
-Contributing
+# Contributing
 Fork the repository
 Create a feature branch
 Make your changes

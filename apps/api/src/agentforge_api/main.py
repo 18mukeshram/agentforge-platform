@@ -26,6 +26,7 @@ from agentforge_api.routes import (
     executions_router,
 )
 from agentforge_api.services.orchestrator import orchestrator
+from agentforge_api.services.cache import result_cache
 from agentforge_api.realtime import (
     websocket_router,
     connection_hub,
@@ -124,6 +125,7 @@ def create_app() -> FastAPI:
                 "connections": connection_hub.connection_count,
                 "subscriptions": connection_hub.subscription_count,
             },
+            "cache": result_cache.stats,
         }
     
     # API routes

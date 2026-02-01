@@ -30,6 +30,9 @@ class EventType(str, Enum):
     NODE_FAILED = "NODE_FAILED"
     NODE_SKIPPED = "NODE_SKIPPED"
     
+    # Cache events
+    NODE_CACHE_HIT = "NODE_CACHE_HIT"
+    
     # Logging
     LOG_EMITTED = "LOG_EMITTED"
 
@@ -149,6 +152,7 @@ def node_completed(
     node_id: str,
     duration_ms: int,
     output_summary: str | None = None,
+    cached: bool = False,
 ) -> ExecutionEvent:
     """Create NODE_COMPLETED event."""
     return ExecutionEvent(
@@ -158,6 +162,24 @@ def node_completed(
             "nodeId": node_id,
             "durationMs": duration_ms,
             "outputSummary": output_summary,
+            "cached": cached,
+        },
+    )
+
+
+def node_cache_hit(
+    execution_id: str,
+    node_id: str,
+    original_duration_ms: int,
+) -> ExecutionEvent:
+    """Create NODE_CACHE_HIT event."""
+    return ExecutionEvent(
+        event_type=EventType.NODE_CACHE_HIT,
+        execution_id=execution_id,
+        payload={
+            "nodeId": node_id,
+            "originalDurationMs": original_duration_ms,
+            "message": "Result retrieved from cache",
         },
     )
 

@@ -19,6 +19,7 @@ from agentforge_api.models import (
 from agentforge_api.realtime import (
     event_emitter,
     node_running,
+    node_cache_hit,
     log_emitted,
 )
 from agentforge_api.services.cache import (
@@ -85,7 +86,10 @@ class AgentRuntime:
         result = await self._execute_node(job, start_time)
         
         # === Cache Write (success only) ===
-        if self.cache_enabled and result.success and is_cacheable and cache_key:
+        if self.cache_enabled and result.success and is_cacheable:
+            # Generate key if not already done (retry success case)
+            if cache_key is None:
+                cache_key = self._generate_cache_key(job)
             await self._write_cache(job, cache_key, result)
         
         return result
@@ -132,19 +136,18 @@ class AgentRuntime:
                 await self._emit_log(job, "info", "Cache miss - executing node")
                 return None
             
-            # Cache hit - return cached result
+            # Cache hit - emit specific event
+            await event_emitter.emit(node_cache_hit(
+                execution_id=job.execution_id,
+                node_id=job.node_id,
+                original_duration_ms=entry.metadata.duration_ms,
+            ))
+            
             await self._emit_log(
                 job,
                 "info",
                 f"Cache hit - returning cached result (originally took {entry.metadata.duration_ms}ms)",
             )
-            
-            # Emit NODE_RUNNING event (brief, for cache hit)
-            await event_emitter.emit(node_running(
-                execution_id=job.execution_id,
-                node_id=job.node_id,
-                retry_count=0,
-            ))
             
             return JobResult(
                 job_id=job.id,
@@ -299,11 +302,7 @@ class AgentRuntime:
         ))
     
     async def _execute_input_node(self, job: NodeJob) -> dict:
-        """
-        Execute an input node.
-        
-        Passes through the provided inputs.
-        """
+        """Execute an input node."""
         await self._emit_log(job, "info", "Processing input data")
         
         return {
@@ -313,11 +312,7 @@ class AgentRuntime:
         }
     
     async def _execute_output_node(self, job: NodeJob) -> dict:
-        """
-        Execute an output node.
-        
-        Collects and formats final outputs.
-        """
+        """Execute an output node."""
         await self._emit_log(job, "info", "Collecting output data")
         
         return {
@@ -327,18 +322,11 @@ class AgentRuntime:
         }
     
     async def _execute_agent_node(self, job: NodeJob) -> dict:
-        """
-        Execute an agent node.
-        
-        Mock implementation that simulates LLM/agent response.
-        """
+        """Execute an agent node (mock)."""
         agent_id = job.agent_id or "unknown"
         
         await self._emit_log(job, "info", f"Invoking agent: {agent_id}")
-        
-        # Simulate agent processing
-        await asyncio.sleep(0.05)  # Additional delay for "thinking"
-        
+        await asyncio.sleep(0.05)
         await self._emit_log(job, "info", "Agent response received")
         
         return {
@@ -355,11 +343,7 @@ class AgentRuntime:
         }
     
     async def _execute_tool_node(self, job: NodeJob) -> dict:
-        """
-        Execute a tool node.
-        
-        Mock implementation that simulates tool execution.
-        """
+        """Execute a tool node (mock)."""
         tool_id = job.node_config.get("tool_id", "unknown")
         
         await self._emit_log(job, "info", f"Executing tool: {tool_id}")
@@ -373,11 +357,7 @@ class AgentRuntime:
         }
     
     async def _execute_generic_node(self, job: NodeJob) -> dict:
-        """
-        Execute a generic/unknown node type.
-        
-        Fallback handler.
-        """
+        """Execute a generic/unknown node type."""
         await self._emit_log(job, "warn", f"Unknown node type: {job.node_type}")
         
         return {
@@ -393,15 +373,11 @@ class AgentRuntime:
 agent_runtime = AgentRuntime(
     min_delay_ms=100,
     max_delay_ms=300,
-    failure_rate=0.0,  # No failures by default
+    failure_rate=0.0,
     cache_enabled=True,
 )
 
 
 async def process_node_job(job: NodeJob) -> JobResult:
-    """
-    Process a node job.
-    
-    This is the function passed to the queue as the job processor.
-    """
+    """Process a node job."""
     return await agent_runtime.execute(job)

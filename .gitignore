@@ -1,2 +1,27 @@
+# .gitignore (additions for infrastructure)
+
+# Environment files
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Docker
+docker-compose.override.local.yml
+
+# Build artifacts
+dist/
+build/
+.next/
+out/
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
 node_modules/
 .venv

@@ -1,0 +1,30 @@
+# docker-compose.override.yml
+
+# ============================================
+# Development Overrides
+# ============================================
+# Automatically loaded by docker compose
+# Adds hot-reload and development features
+# ============================================
+
+services:
+  api:
+    build:
+      target: production # Can switch to 'builder' for dev
+    environment:
+      - AGENTFORGE_DEBUG=true
+    volumes:
+      # Mount source for development (optional - comment out for production-like testing)
+      # - ./apps/api/src:/app/src:ro
+    labels:
+      - "com.agentforge.environment=development"
+
+  web:
+    environment:
+      - NODE_ENV=development
+    labels:
+      - "com.agentforge.environment=development"
+
+  redis:
+    labels:
+      - "com.agentforge.environment=development"

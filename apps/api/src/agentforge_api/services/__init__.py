@@ -24,6 +24,15 @@ from agentforge_api.services.agent_runtime import (
     agent_runtime,
     process_node_job,
 )
+from agentforge_api.services.cache import (
+    CacheKey,
+    CacheEntry,
+    CacheMetadata,
+    ResultCache,
+    compute_inputs_hash,
+    generate_cache_key,
+    result_cache,
+)
 
 __all__ = [
     # Workflow
@@ -43,4 +52,12 @@ __all__ = [
     "AgentRuntime",
     "agent_runtime",
     "process_node_job",
+    # Cache
+    "CacheKey",
+    "CacheEntry",
+    "CacheMetadata",
+    "ResultCache",
+    "compute_inputs_hash",
+    "generate_cache_key",
+    "result_cache",
 ]

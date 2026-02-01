@@ -21,6 +21,11 @@ from agentforge_api.realtime.emitter import (
     EventHandler,
     event_emitter,
 )
+from agentforge_api.realtime.hub import (
+    Connection,
+    ConnectionHub,
+    connection_hub,
+)
 
 __all__ = [
     # Event types
@@ -41,4 +46,8 @@ __all__ = [
     "EventEmitter",
     "EventHandler",
     "event_emitter",
+    # Hub
+    "Connection",
+    "ConnectionHub",
+    "connection_hub",
 ]

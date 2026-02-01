@@ -4,6 +4,7 @@
 Workflow service for CRUD operations.
 
 Uses in-memory storage for now. Will be replaced with PostgreSQL.
+All operations enforce tenant isolation.
 """
 
 from datetime import datetime, timezone
@@ -31,11 +32,14 @@ class WorkflowService:
     
     In-memory implementation for Phase 4.
     Thread-safety not addressed (single-threaded dev server).
+    All operations enforce tenant isolation.
     """
     
     def __init__(self) -> None:
         self._workflows: dict[str, Workflow] = {}
         self._validation_errors: dict[str, list[ValidationError]] = {}
+        # Track tenant ownership
+        self._workflow_tenants: dict[str, str] = {}  # workflow_id -> tenant_id
     
     def create(
         self,
@@ -44,6 +48,7 @@ class WorkflowService:
         nodes: list[Node],
         edges: list[Edge],
         owner_id: str,
+        tenant_id: str,
     ) -> tuple[Workflow, list[ValidationError] | None]:
         """
         Create a new workflow.
@@ -94,17 +99,22 @@ class WorkflowService:
             self._validation_errors[workflow_id] = errors
         
         self._workflows[workflow_id] = workflow
+        self._workflow_tenants[workflow_id] = tenant_id
+        
         return workflow, errors
     
-    def get(self, workflow_id: str, owner_id: str) -> Workflow:
+    def get(self, workflow_id: str, tenant_id: str) -> Workflow:
         """
         Get a workflow by ID.
         
-        Raises WorkflowNotFoundError if not found or not owned.
+        Raises WorkflowNotFoundError if not found or wrong tenant.
+        Enforces tenant isolation.
         """
         workflow = self._workflows.get(workflow_id)
+        stored_tenant = self._workflow_tenants.get(workflow_id)
         
-        if workflow is None or workflow.meta.owner_id != owner_id:
+        # Check existence AND tenant match
+        if workflow is None or stored_tenant != tenant_id:
             raise WorkflowNotFoundError(workflow_id)
         
         return workflow
@@ -115,21 +125,21 @@ class WorkflowService:
     
     def list(
         self,
-        owner_id: str,
+        tenant_id: str,
         status: WorkflowStatus | None = None,
         limit: int = 20,
         cursor: str | None = None,
     ) -> tuple[list[Workflow], str | None]:
         """
-        List workflows for an owner.
+        List workflows for a tenant.
         
         Returns (workflows, next_cursor).
-        Simple implementation: cursor is just the last workflow ID.
+        Only returns workflows belonging to the specified tenant.
         """
-        # Filter by owner and optionally by status
+        # Filter by tenant and optionally by status
         workflows = [
             w for w in self._workflows.values()
-            if w.meta.owner_id == owner_id
+            if self._workflow_tenants.get(w.id) == tenant_id
             and (status is None or w.status == status)
         ]
         
@@ -159,7 +169,7 @@ class WorkflowService:
     def update(
         self,
         workflow_id: str,
-        owner_id: str,
+        tenant_id: str,
         nodes: list[Node],
         edges: list[Edge],
         version: int,
@@ -172,8 +182,9 @@ class WorkflowService:
         Runs structural validation and updates status.
         Raises VersionConflictError if version doesn't match.
         Raises WorkflowArchivedError if workflow is archived.
+        Enforces tenant isolation.
         """
-        existing = self.get(workflow_id, owner_id)
+        existing = self.get(workflow_id, tenant_id)
         
         if existing.status == WorkflowStatus.ARCHIVED:
             raise WorkflowArchivedError(workflow_id)
@@ -195,7 +206,7 @@ class WorkflowService:
                 description=description if description is not None else existing.meta.description,
                 created_at=existing.meta.created_at,
                 updated_at=now,
-                owner_id=owner_id,
+                owner_id=existing.meta.owner_id,
                 version=existing.meta.version + 1,
             ),
             nodes=nodes,
@@ -227,13 +238,17 @@ class WorkflowService:
             self._validation_errors[workflow_id] = errors
         
         self._workflows[workflow_id] = workflow
+        # Tenant doesn't change on update
+        
         return workflow, errors
     
-    def delete(self, workflow_id: str, owner_id: str) -> Workflow:
+    def delete(self, workflow_id: str, tenant_id: str) -> Workflow:
         """
         Soft-delete a workflow by setting status to ARCHIVED.
+        
+        Enforces tenant isolation.
         """
-        existing = self.get(workflow_id, owner_id)
+        existing = self.get(workflow_id, tenant_id)
         
         now = datetime.now(timezone.utc)
         
@@ -245,7 +260,7 @@ class WorkflowService:
                 description=existing.meta.description,
                 created_at=existing.meta.created_at,
                 updated_at=now,
-                owner_id=owner_id,
+                owner_id=existing.meta.owner_id,
                 version=existing.meta.version,
             ),
             nodes=existing.nodes,
@@ -256,6 +271,10 @@ class WorkflowService:
         self._validation_errors.pop(workflow_id, None)
         
         return workflow
+    
+    def get_tenant_id(self, workflow_id: str) -> str | None:
+        """Get the tenant ID for a workflow (used by execution service)."""
+        return self._workflow_tenants.get(workflow_id)
 
 
 # Singleton instance for now (will be replaced with DI)

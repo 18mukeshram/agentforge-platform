@@ -8,6 +8,7 @@ Responsible for:
 - Dispatching jobs to the queue
 - Coordinating job completion and dependent job dispatch
 - Managing execution lifecycle
+- Emitting real-time events
 """
 
 from datetime import datetime, timezone
@@ -37,6 +38,17 @@ from agentforge_api.core.exceptions import (
     WorkflowInvalidError,
     ErrorDetail,
 )
+from agentforge_api.realtime import (
+    event_emitter,
+    execution_started,
+    execution_completed,
+    execution_failed,
+    execution_cancelled,
+    node_queued,
+    node_completed,
+    node_failed,
+    node_skipped,
+)
 
 
 class ExecutionOrchestrator:
@@ -49,6 +61,7 @@ class ExecutionOrchestrator:
     
     def __init__(self) -> None:
         self._plans: dict[str, ExecutionPlan] = {}
+        self._start_times: dict[str, datetime] = {}  # Track execution start times
         self._initialized = False
     
     async def initialize(self) -> None:
@@ -156,8 +169,18 @@ class ExecutionOrchestrator:
         # Generate execution plan
         plan = self.generate_plan(workflow, execution.id)
         
+        # Track start time
+        self._start_times[execution.id] = datetime.now(timezone.utc)
+        
         # Update execution status to RUNNING
         execution_service.update_status(execution.id, ExecutionStatus.RUNNING)
+        
+        # Emit EXECUTION_STARTED event
+        await event_emitter.emit(execution_started(
+            execution_id=execution.id,
+            workflow_id=workflow.id,
+            node_count=len(workflow.nodes),
+        ))
         
         # Create and dispatch entry node jobs
         node_map = workflow.get_node_map()
@@ -188,6 +211,12 @@ class ExecutionOrchestrator:
                 status=NodeExecutionStatus.QUEUED,
             )
             
+            # Emit NODE_QUEUED event
+            await event_emitter.emit(node_queued(
+                execution_id=execution.id,
+                node_id=node_id,
+            ))
+            
             await job_queue.add(job)
         
         return plan
@@ -215,6 +244,17 @@ class ExecutionOrchestrator:
                 retry_count=retry_count,
             )
             
+            # Emit NODE_COMPLETED event
+            output_summary = None
+            if isinstance(result.output, dict):
+                output_summary = str(result.output.get("result", ""))[:100]
+            await event_emitter.emit(node_completed(
+                execution_id=execution_id,
+                node_id=node_id,
+                duration_ms=result.duration_ms,
+                output_summary=output_summary,
+            ))
+            
             # Dispatch dependent jobs
             await self._dispatch_dependents(execution_id, node_id)
         else:
@@ -226,6 +266,15 @@ class ExecutionOrchestrator:
                 error=result.error,
                 retry_count=retry_count,
             )
+            
+            # Emit NODE_FAILED event
+            await event_emitter.emit(node_failed(
+                execution_id=execution_id,
+                node_id=node_id,
+                error=result.error or "Unknown error",
+                retry_count=retry_count,
+                will_retry=False,  # Retries handled by queue
+            ))
             
             # Skip all descendants (invariant E2)
             await self._skip_descendants(execution_id, node_id)
@@ -306,6 +355,12 @@ class ExecutionOrchestrator:
                 status=NodeExecutionStatus.QUEUED,
             )
             
+            # Emit NODE_QUEUED event
+            await event_emitter.emit(node_queued(
+                execution_id=execution_id,
+                node_id=dep_id,
+            ))
+            
             await job_queue.add(job)
     
     async def _skip_descendants(
@@ -331,12 +386,21 @@ class ExecutionOrchestrator:
         
         # Mark all as skipped
         for node_id in to_skip:
+            reason = f"Skipped due to upstream failure: {failed_node_id}"
+            
             execution_service.update_node_state(
                 execution_id=execution_id,
                 node_id=node_id,
                 status=NodeExecutionStatus.SKIPPED,
-                error=f"Skipped due to upstream failure: {failed_node_id}",
+                error=reason,
             )
+            
+            # Emit NODE_SKIPPED event
+            await event_emitter.emit(node_skipped(
+                execution_id=execution_id,
+                node_id=node_id,
+                reason=reason,
+            ))
     
     async def _check_execution_complete(self, execution_id: str) -> None:
         """Check if execution is complete and update status."""
@@ -345,6 +409,44 @@ class ExecutionOrchestrator:
         current = execution_service._executions.get(execution_id)
         if current and current.status != aggregate_status:
             execution_service.update_status(execution_id, aggregate_status)
+            
+            # Emit appropriate completion event
+            if aggregate_status == ExecutionStatus.COMPLETED:
+                duration_ms = self._compute_duration(execution_id)
+                await event_emitter.emit(execution_completed(
+                    execution_id=execution_id,
+                    duration_ms=duration_ms,
+                ))
+                self._cleanup_execution(execution_id)
+                
+            elif aggregate_status == ExecutionStatus.FAILED:
+                await event_emitter.emit(execution_failed(
+                    execution_id=execution_id,
+                    error="One or more nodes failed",
+                ))
+                self._cleanup_execution(execution_id)
+    
+    async def cancel_execution(self, execution_id: str) -> None:
+        """Cancel an execution and emit event."""
+        # Emit EXECUTION_CANCELLED event
+        await event_emitter.emit(execution_cancelled(
+            execution_id=execution_id,
+        ))
+        self._cleanup_execution(execution_id)
+    
+    def _compute_duration(self, execution_id: str) -> int:
+        """Compute execution duration in milliseconds."""
+        start_time = self._start_times.get(execution_id)
+        if start_time is None:
+            return 0
+        
+        duration = datetime.now(timezone.utc) - start_time
+        return int(duration.total_seconds() * 1000)
+    
+    def _cleanup_execution(self, execution_id: str) -> None:
+        """Clean up execution tracking data."""
+        self._plans.pop(execution_id, None)
+        self._start_times.pop(execution_id, None)
     
     def _create_job(
         self,

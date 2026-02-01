@@ -205,6 +205,9 @@ async def cancel_execution(execution_id: str) -> ExecutionCancelResponse:
                 error="Cancelled by user",
             )
     
+    # Emit cancellation event
+    await orchestrator.cancel_execution(execution_id)
+    
     return ExecutionCancelResponse(
         id=updated.id,
         status=updated.status,

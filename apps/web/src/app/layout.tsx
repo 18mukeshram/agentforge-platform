@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/components/layout";
 import { QueryProvider } from "@/lib/query";
+import { NotificationToast } from "@/components/ui/notification-toast";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -21,6 +22,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <QueryProvider>
           <AppShell>{children}</AppShell>
+          <NotificationToast />
         </QueryProvider>
       </body>
     </html>

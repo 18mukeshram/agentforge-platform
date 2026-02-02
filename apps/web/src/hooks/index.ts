@@ -19,3 +19,5 @@ export {
   useExecuteWorkflow,
   useCancelExecution,
 } from "./use-executions";
+
+export { useConnectionValidation } from "./use-connection-validation";

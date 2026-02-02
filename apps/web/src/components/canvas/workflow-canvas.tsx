@@ -15,16 +15,14 @@ import ReactFlow, {
   type Connection,
   type NodeChange,
   type EdgeChange,
+  type IsValidConnection,
   BackgroundVariant,
   ConnectionLineType,
 } from "reactflow";
-import { useCanvasStore, useWorkflowStore } from "@/stores";
+import { useCanvasStore, useWorkflowStore, useUiStore } from "@/stores";
 import { nodeTypes } from "./nodes";
-import {
-  toCanvasElements,
-  fromCanvasElements,
-  isValidConnection,
-} from "./utils";
+import { edgeTypes, ConnectionLine, validateConnection } from "./edges";
+import { toCanvasElements, fromCanvasElements } from "./utils";
 import { cn } from "@/lib/utils";
 
 interface WorkflowCanvasProps {
@@ -36,7 +34,7 @@ function WorkflowCanvasInner({ className }: WorkflowCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const { fitView } = useReactFlow();
 
-  // Canvas store
+  // Stores
   const {
     nodes,
     edges,
@@ -46,16 +44,16 @@ function WorkflowCanvasInner({ className }: WorkflowCanvasProps) {
     onEdgesChange,
     onConnect,
     setViewport,
-    selectedNodeIds,
     clearSelection,
   } = useCanvasStore();
 
-  // Workflow store
   const {
     workflow,
     setNodes: setWorkflowNodes,
     setEdges: setWorkflowEdges,
   } = useWorkflowStore();
+
+  const { addNotification } = useUiStore();
 
   // Sync workflow to canvas on load
   useEffect(() => {
@@ -67,12 +65,11 @@ function WorkflowCanvasInner({ className }: WorkflowCanvasProps) {
       setNodes(canvasNodes);
       setEdges(canvasEdges);
 
-      // Fit view after a short delay to ensure nodes are rendered
       setTimeout(() => {
         fitView({ padding: 0.2 });
       }, 100);
     }
-  }, [workflow, setNodes, setEdges, fitView]); // Include all dependencies
+  }, [workflow, setNodes, setEdges, fitView]);
 
   // Sync canvas changes back to workflow store
   useEffect(() => {
@@ -102,25 +99,51 @@ function WorkflowCanvasInner({ className }: WorkflowCanvasProps) {
     [onEdgesChange],
   );
 
+  // Validate connection before allowing it
+  const isValidConnection: IsValidConnection = useCallback(
+    (connection: Connection | any) => {
+      if (!connection.source || !connection.target) return false;
+
+      const validation = validateConnection(
+        connection.source,
+        connection.target,
+        connection.sourceHandle || null,
+        connection.targetHandle || null,
+        nodes,
+        edges,
+      );
+
+      return validation.valid;
+    },
+    [nodes, edges],
+  );
+
   // Handle new connections
   const handleConnect = useCallback(
     (connection: Connection) => {
-      if (connection.source && connection.target) {
-        const validation = isValidConnection(
-          connection.source,
-          connection.target,
-          edges,
-        );
+      if (!connection.source || !connection.target) return;
 
-        if (validation.valid) {
-          onConnect(connection);
-        } else {
-          // TODO: Show error notification
-          console.warn("Invalid connection:", validation.reason);
-        }
+      const validation = validateConnection(
+        connection.source,
+        connection.target,
+        connection.sourceHandle,
+        connection.targetHandle,
+        nodes,
+        edges,
+      );
+
+      if (validation.valid) {
+        onConnect(connection);
+      } else {
+        addNotification({
+          type: "error",
+          title: "Invalid Connection",
+          message: validation.reason || "Cannot create this connection",
+          duration: 3000,
+        });
       }
     },
-    [edges, onConnect],
+    [nodes, edges, onConnect, addNotification],
   );
 
   // Handle click on canvas background
@@ -147,16 +170,19 @@ function WorkflowCanvasInner({ className }: WorkflowCanvasProps) {
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         onNodesChange={handleNodesChange}
         onEdgesChange={handleEdgesChange}
         onConnect={handleConnect}
         onPaneClick={handlePaneClick}
         onInit={handleInit}
         onMoveEnd={handleMoveEnd}
+        isValidConnection={isValidConnection}
+        connectionLineComponent={ConnectionLine}
         fitView
         fitViewOptions={{ padding: 0.2 }}
         defaultEdgeOptions={{
-          type: "smoothstep",
+          type: "workflow",
           animated: false,
         }}
         connectionLineType={ConnectionLineType.SmoothStep}
@@ -168,7 +194,7 @@ function WorkflowCanvasInner({ className }: WorkflowCanvasProps) {
         multiSelectionKeyCode={["Shift", "Meta"]}
         panOnScroll
         selectionOnDrag
-        panOnDrag={[1, 2]} // Middle and right mouse button
+        panOnDrag={[1, 2]}
         selectNodesOnDrag={false}
         elevateNodesOnSelect
       >

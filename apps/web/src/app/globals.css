@@ -136,3 +136,42 @@
 .react-flow__background {
   background-color: hsl(var(--background));
 }
+
+/* Edge flow animation */
+@keyframes flowAnimation {
+  0% {
+    stroke-dashoffset: 24;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+.animate-flow {
+  stroke-dasharray: 8, 4;
+  animation: flowAnimation 0.5s linear infinite;
+}
+
+/* Edge hover area */
+.react-flow__edge-interaction {
+  cursor: pointer;
+}
+
+/* Connection line animation */
+.react-flow__connection-path {
+  stroke: hsl(var(--primary));
+  stroke-width: 2;
+}
+
+/* Valid connection indicator */
+.react-flow__handle.connecting {
+  background: hsl(var(--primary));
+}
+
+.react-flow__handle.valid {
+  background: hsl(142, 76%, 36%); /* green */
+}
+
+.react-flow__handle.invalid {
+  background: hsl(0, 84%, 60%); /* red */
+}

@@ -1,4 +1,5 @@
 # apps/api/src/agentforge_api/services/workflow_service.py
+from __future__ import annotations
 
 """
 Workflow service for CRUD operations.

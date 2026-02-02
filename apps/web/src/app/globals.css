@@ -1,3 +1,4 @@
+@import "reactflow/dist/style.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -66,4 +67,72 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* React Flow Customizations */
+.react-flow__handle {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: hsl(var(--primary));
+  border: 2px solid hsl(var(--background));
+}
+
+.react-flow__handle-left {
+  left: -6px;
+}
+
+.react-flow__handle-right {
+  right: -6px;
+}
+
+.react-flow__handle-top {
+  top: -6px;
+}
+
+.react-flow__handle-bottom {
+  bottom: -6px;
+}
+
+.react-flow__edge-path {
+  stroke: hsl(var(--border));
+  stroke-width: 2;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: hsl(var(--primary));
+  stroke-width: 2;
+}
+
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke: hsl(var(--primary));
+}
+
+.react-flow__controls {
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+  border-radius: var(--radius);
+  border: 1px solid hsl(var(--border));
+}
+
+.react-flow__controls-button {
+  background: hsl(var(--background));
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.react-flow__controls-button:hover {
+  background: hsl(var(--accent));
+}
+
+.react-flow__controls-button svg {
+  fill: hsl(var(--foreground));
+}
+
+.react-flow__minimap {
+  background-color: hsl(var(--background));
+  border-radius: var(--radius);
+  border: 1px solid hsl(var(--border));
+}
+
+.react-flow__background {
+  background-color: hsl(var(--background));
 }

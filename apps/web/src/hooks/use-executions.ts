@@ -52,7 +52,10 @@ export function useExecutionLogs(
   params?: GetExecutionLogsParams,
 ) {
   return useQuery({
-    queryKey: queryKeys.executions.logs(id!, params as unknown as Record<string, unknown>),
+    queryKey: queryKeys.executions.logs(
+      id!,
+      params as unknown as Record<string, unknown>,
+    ),
     queryFn: () => getExecutionLogs(id!, params),
     enabled: !!id,
   });

@@ -18,4 +18,15 @@ export const nodeTypes: NodeTypes = {
   output: OutputNode,
 };
 
+// Components
 export { AgentNode, ToolNode, InputNode, OutputNode };
+export { EnhancedBaseNode } from "./enhanced-base-node";
+export { NodeContextMenu } from "./node-context-menu";
+export { NodeStatus } from "./node-status";
+export { NodeConfigPopover } from "./node-config-popover";
+
+// Icons
+export * from "./icons";
+
+// Types and utilities
+export * from "./types";

@@ -7,7 +7,6 @@
 import { useCallback, useRef, useEffect } from "react";
 import ReactFlow, {
   Background,
-  Controls,
   MiniMap,
   ReactFlowProvider,
   useReactFlow,
@@ -21,9 +20,13 @@ import ReactFlow, {
 } from "reactflow";
 import { useCanvasStore, useWorkflowStore, useUiStore } from "@/stores";
 import { nodeTypes } from "./nodes";
+import { getDefaultNodeConfig, getDefaultNodeLabel } from "./nodes/types";
 import { edgeTypes, ConnectionLine, validateConnection } from "./edges";
 import { toCanvasElements, fromCanvasElements } from "./utils";
+import { Toolbar } from "./toolbar";
+import { NodePalette } from "./node-palette";
 import { cn } from "@/lib/utils";
+import type { NodeType } from "@/types";
 
 interface WorkflowCanvasProps {
   className?: string;
@@ -45,6 +48,7 @@ function WorkflowCanvasInner({ className }: WorkflowCanvasProps) {
     onConnect,
     setViewport,
     clearSelection,
+    addNode,
   } = useCanvasStore();
 
   const {
@@ -164,8 +168,55 @@ function WorkflowCanvasInner({ className }: WorkflowCanvasProps) {
     [setViewport],
   );
 
+  // Handle drag over for node palette drops
+  const handleDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  }, []);
+
+  // Handle drop from node palette
+  const handleDrop = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault();
+
+      const nodeType = event.dataTransfer.getData("application/reactflow-nodetype") as NodeType;
+      if (!nodeType || !reactFlowInstance.current) return;
+
+      // Get drop position in flow coordinates
+      const position = reactFlowInstance.current.screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      });
+
+      // Snap to grid
+      const snappedPosition = {
+        x: Math.round(position.x / 16) * 16,
+        y: Math.round(position.y / 16) * 16,
+      };
+
+      // Create new node
+      const newNode = {
+        id: `${nodeType}-${Date.now()}`,
+        type: nodeType,
+        position: snappedPosition,
+        data: {
+          label: getDefaultNodeLabel(nodeType),
+          config: getDefaultNodeConfig(nodeType),
+        },
+      };
+
+      addNode(newNode);
+    },
+    [addNode],
+  );
+
   return (
-    <div ref={containerRef} className={cn("h-full w-full", className)}>
+    <div
+      ref={containerRef}
+      className={cn("relative h-full w-full", className)}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -204,12 +255,6 @@ function WorkflowCanvasInner({ className }: WorkflowCanvasProps) {
           size={1}
           className="!bg-muted/30"
         />
-        <Controls
-          showZoom
-          showFitView
-          showInteractive={false}
-          className="!shadow-md"
-        />
         <MiniMap
           nodeStrokeWidth={3}
           zoomable
@@ -217,6 +262,12 @@ function WorkflowCanvasInner({ className }: WorkflowCanvasProps) {
           className="!bg-background !border-border"
         />
       </ReactFlow>
+
+      {/* Canvas Toolbar */}
+      <Toolbar />
+
+      {/* Node Palette */}
+      <NodePalette />
     </div>
   );
 }

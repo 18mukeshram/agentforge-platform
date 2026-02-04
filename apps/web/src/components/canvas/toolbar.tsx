@@ -1,0 +1,341 @@
+"use client";
+
+/**
+ * Canvas toolbar component.
+ * Provides action buttons for canvas operations like zoom, fit, selection, and clipboard.
+ */
+
+import { useReactFlow } from "reactflow";
+import { useCanvasStore, useUiStore } from "@/stores";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
+
+interface ToolbarProps {
+  className?: string;
+}
+
+export function Toolbar({ className }: ToolbarProps) {
+  const reactFlow = useReactFlow();
+
+  // Canvas store actions
+  const { selectAll, deleteSelected, copySelected, paste, selectedNodeIds, selectedEdgeIds } =
+    useCanvasStore();
+
+  // UI store actions
+  const { nodePaletteOpen, toggleNodePalette } = useUiStore();
+
+  const hasSelection = selectedNodeIds.length > 0 || selectedEdgeIds.length > 0;
+
+  // Zoom handlers
+  const handleZoomIn = () => {
+    reactFlow.zoomIn({ duration: 200 });
+  };
+
+  const handleZoomOut = () => {
+    reactFlow.zoomOut({ duration: 200 });
+  };
+
+  const handleFitView = () => {
+    reactFlow.fitView({ padding: 0.2, duration: 200 });
+  };
+
+  const handleResetZoom = () => {
+    reactFlow.setViewport({ x: 0, y: 0, zoom: 1 }, { duration: 200 });
+  };
+
+  return (
+    <TooltipProvider delayDuration={300}>
+      <div
+        className={cn(
+          "absolute left-1/2 top-4 z-10 -translate-x-1/2",
+          "flex items-center gap-1 rounded-lg border bg-background/95 p-1 shadow-lg backdrop-blur",
+          className
+        )}
+      >
+        {/* Node Palette Toggle */}
+        <ToolbarButton
+          tooltip={nodePaletteOpen ? "Hide Node Palette" : "Show Node Palette"}
+          onClick={toggleNodePalette}
+          active={nodePaletteOpen}
+        >
+          <PanelLeftIcon className="h-4 w-4" />
+        </ToolbarButton>
+
+        <Separator orientation="vertical" className="mx-1 h-6" />
+
+        {/* Zoom Controls */}
+        <ToolbarButton tooltip="Zoom In" onClick={handleZoomIn}>
+          <ZoomInIcon className="h-4 w-4" />
+        </ToolbarButton>
+
+        <ToolbarButton tooltip="Zoom Out" onClick={handleZoomOut}>
+          <ZoomOutIcon className="h-4 w-4" />
+        </ToolbarButton>
+
+        <ToolbarButton tooltip="Fit View" onClick={handleFitView}>
+          <MaximizeIcon className="h-4 w-4" />
+        </ToolbarButton>
+
+        <ToolbarButton tooltip="Reset Zoom" onClick={handleResetZoom}>
+          <LocateFixedIcon className="h-4 w-4" />
+        </ToolbarButton>
+
+        <Separator orientation="vertical" className="mx-1 h-6" />
+
+        {/* Selection Controls */}
+        <ToolbarButton tooltip="Select All" onClick={selectAll}>
+          <BoxSelectIcon className="h-4 w-4" />
+        </ToolbarButton>
+
+        <ToolbarButton
+          tooltip="Delete Selected"
+          onClick={deleteSelected}
+          disabled={!hasSelection}
+        >
+          <TrashIcon className="h-4 w-4" />
+        </ToolbarButton>
+
+        <Separator orientation="vertical" className="mx-1 h-6" />
+
+        {/* Clipboard Controls */}
+        <ToolbarButton
+          tooltip="Copy"
+          onClick={copySelected}
+          disabled={!hasSelection}
+        >
+          <CopyIcon className="h-4 w-4" />
+        </ToolbarButton>
+
+        <ToolbarButton tooltip="Paste" onClick={paste}>
+          <ClipboardIcon className="h-4 w-4" />
+        </ToolbarButton>
+      </div>
+    </TooltipProvider>
+  );
+}
+
+// Toolbar button with tooltip
+interface ToolbarButtonProps {
+  tooltip: string;
+  onClick: () => void;
+  disabled?: boolean;
+  active?: boolean;
+  children: React.ReactNode;
+}
+
+function ToolbarButton({
+  tooltip,
+  onClick,
+  disabled,
+  active,
+  children,
+}: ToolbarButtonProps) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant={active ? "secondary" : "ghost"}
+          size="icon"
+          className="h-8 w-8"
+          onClick={onClick}
+          disabled={disabled}
+        >
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="text-xs">
+        {tooltip}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+// Icon components
+function PanelLeftIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <path d="M9 3v18" />
+    </svg>
+  );
+}
+
+function ZoomInIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.3-4.3" />
+      <path d="M11 8v6" />
+      <path d="M8 11h6" />
+    </svg>
+  );
+}
+
+function ZoomOutIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.3-4.3" />
+      <path d="M8 11h6" />
+    </svg>
+  );
+}
+
+function MaximizeIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+      <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
+      <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+      <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+    </svg>
+  );
+}
+
+function LocateFixedIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M2 12h3" />
+      <path d="M19 12h3" />
+      <path d="M12 2v3" />
+      <path d="M12 19v3" />
+      <circle cx="12" cy="12" r="7" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function BoxSelectIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M5 3a2 2 0 0 0-2 2" />
+      <path d="M19 3a2 2 0 0 1 2 2" />
+      <path d="M21 19a2 2 0 0 1-2 2" />
+      <path d="M5 21a2 2 0 0 1-2-2" />
+      <path d="M9 3h1" />
+      <path d="M9 21h1" />
+      <path d="M14 3h1" />
+      <path d="M14 21h1" />
+      <path d="M3 9v1" />
+      <path d="M21 9v1" />
+      <path d="M3 14v1" />
+      <path d="M21 14v1" />
+    </svg>
+  );
+}
+
+function TrashIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M3 6h18" />
+      <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+      <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+    </svg>
+  );
+}
+
+function CopyIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+      <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+    </svg>
+  );
+}
+
+function ClipboardIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
+      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+    </svg>
+  );
+}

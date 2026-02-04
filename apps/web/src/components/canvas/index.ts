@@ -3,6 +3,8 @@
  */
 
 export { WorkflowCanvas } from "./workflow-canvas";
+export { Toolbar } from "./toolbar";
+export { NodePalette } from "./node-palette";
 
 // Nodes
 export {

@@ -27,6 +27,7 @@ import { toCanvasElements, fromCanvasElements } from "./utils";
 import { Toolbar } from "./toolbar";
 import { NodePalette } from "./node-palette";
 import { ExecutionLogsPanel } from "./execution-logs-panel";
+import { ExecutionHistoryPanel } from "@/components/executions";
 import { cn } from "@/lib/utils";
 import type { NodeType } from "@/types";
 
@@ -426,6 +427,9 @@ function WorkflowCanvasInner({ className }: WorkflowCanvasProps) {
 
       {/* Execution Logs Panel */}
       <ExecutionLogsPanel />
+
+      {/* Execution History Panel */}
+      <ExecutionHistoryPanel />
     </div>
   );
 }

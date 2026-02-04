@@ -38,7 +38,7 @@ export function Toolbar({ className, onSave, onValidate, onRun }: ToolbarProps) 
   const { isExecuting } = useExecutionStore();
 
   // UI store actions
-  const { nodePaletteOpen, toggleNodePalette } = useUiStore();
+  const { nodePaletteOpen, toggleNodePalette, executionHistoryOpen, toggleExecutionHistory } = useUiStore();
 
   const hasSelection = selectedNodeIds.length > 0 || selectedEdgeIds.length > 0;
   const canSave = !!workflow && isDirty && !isSaving;
@@ -199,6 +199,17 @@ export function Toolbar({ className, onSave, onValidate, onRun }: ToolbarProps) 
             </ToolbarButton>
           </>
         )}
+
+        {/* History Toggle */}
+        <Separator orientation="vertical" className="mx-1 h-6" />
+
+        <ToolbarButton
+          tooltip={executionHistoryOpen ? "Hide History" : "Show History"}
+          onClick={toggleExecutionHistory}
+          active={executionHistoryOpen}
+        >
+          <HistoryIcon className="h-4 w-4" />
+        </ToolbarButton>
       </div>
     </TooltipProvider>
   );
@@ -508,6 +519,25 @@ function PlayIcon({ className }: { className?: string }) {
       className={className}
     >
       <polygon points="6 3 20 12 6 21 6 3" />
+    </svg>
+  );
+}
+
+function HistoryIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+      <path d="M12 7v5l4 2" />
     </svg>
   );
 }

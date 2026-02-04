@@ -15,6 +15,7 @@ interface UiState {
   nodePaletteOpen: boolean;
   propertiesPanelOpen: boolean;
   executionPanelOpen: boolean;
+  executionHistoryOpen: boolean;
 
   // Modals
   activeModal: ModalType | null;
@@ -34,9 +35,11 @@ interface UiActions {
   toggleNodePalette: () => void;
   togglePropertiesPanel: () => void;
   toggleExecutionPanel: () => void;
+  toggleExecutionHistory: () => void;
   setNodePaletteOpen: (open: boolean) => void;
   setPropertiesPanelOpen: (open: boolean) => void;
   setExecutionPanelOpen: (open: boolean) => void;
+  setExecutionHistoryOpen: (open: boolean) => void;
 
   // Modals
   openModal: (type: ModalType, data?: Record<string, unknown>) => void;
@@ -72,6 +75,7 @@ const initialState: UiState = {
   nodePaletteOpen: true,
   propertiesPanelOpen: true,
   executionPanelOpen: false,
+  executionHistoryOpen: false,
   activeModal: null,
   modalData: {},
   notifications: [],
@@ -113,6 +117,11 @@ export const useUiStore = create<UiStore>()(
         state.executionPanelOpen = !state.executionPanelOpen;
       }),
 
+    toggleExecutionHistory: () =>
+      set((state) => {
+        state.executionHistoryOpen = !state.executionHistoryOpen;
+      }),
+
     setNodePaletteOpen: (open) =>
       set((state) => {
         state.nodePaletteOpen = open;
@@ -126,6 +135,11 @@ export const useUiStore = create<UiStore>()(
     setExecutionPanelOpen: (open) =>
       set((state) => {
         state.executionPanelOpen = open;
+      }),
+
+    setExecutionHistoryOpen: (open) =>
+      set((state) => {
+        state.executionHistoryOpen = open;
       }),
 
     // Modals

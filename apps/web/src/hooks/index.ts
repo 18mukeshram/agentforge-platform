@@ -21,3 +21,5 @@ export {
 } from "./use-executions";
 
 export { useConnectionValidation } from "./use-connection-validation";
+
+export { useExecutionWebSocket } from "./use-execution-websocket";

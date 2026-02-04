@@ -6,7 +6,7 @@
  */
 
 import { useReactFlow } from "reactflow";
-import { useCanvasStore, useUiStore, useWorkflowStore } from "@/stores";
+import { useCanvasStore, useUiStore, useWorkflowStore, useExecutionStore } from "@/stores";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -21,9 +21,10 @@ interface ToolbarProps {
   className?: string;
   onSave?: () => void;
   onValidate?: () => void;
+  onRun?: () => void;
 }
 
-export function Toolbar({ className, onSave, onValidate }: ToolbarProps) {
+export function Toolbar({ className, onSave, onValidate, onRun }: ToolbarProps) {
   const reactFlow = useReactFlow();
 
   // Canvas store actions
@@ -33,12 +34,16 @@ export function Toolbar({ className, onSave, onValidate }: ToolbarProps) {
   // Workflow store state
   const { isDirty, isSaving, isValidating, workflow } = useWorkflowStore();
 
+  // Execution store state
+  const { isExecuting } = useExecutionStore();
+
   // UI store actions
   const { nodePaletteOpen, toggleNodePalette } = useUiStore();
 
   const hasSelection = selectedNodeIds.length > 0 || selectedEdgeIds.length > 0;
   const canSave = !!workflow && isDirty && !isSaving;
   const canValidate = !!workflow && !isValidating;
+  const canRun = !!workflow && workflow.status === "valid" && !isExecuting;
 
   // Zoom handlers
   const handleZoomIn = () => {
@@ -165,6 +170,31 @@ export function Toolbar({ className, onSave, onValidate }: ToolbarProps) {
                 <LoaderIcon className="h-4 w-4" />
               ) : (
                 <ShieldCheckIcon className="h-4 w-4" />
+              )}
+            </ToolbarButton>
+          </>
+        )}
+
+        {/* Run Controls */}
+        {onRun && (
+          <>
+            <Separator orientation="vertical" className="mx-1 h-6" />
+
+            <ToolbarButton
+              tooltip={
+                isExecuting
+                  ? "Execution in progress..."
+                  : workflow?.status !== "valid"
+                    ? "Validate workflow first"
+                    : "Run Workflow"
+              }
+              onClick={onRun}
+              disabled={!canRun}
+            >
+              {isExecuting ? (
+                <LoaderIcon className="h-4 w-4" />
+              ) : (
+                <PlayIcon className="h-4 w-4" />
               )}
             </ToolbarButton>
           </>
@@ -461,6 +491,23 @@ function ShieldCheckIcon({ className }: { className?: string }) {
     >
       <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
       <path d="m9 12 2 2 4-4" />
+    </svg>
+  );
+}
+
+function PlayIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <polygon points="6 3 20 12 6 21 6 3" />
     </svg>
   );
 }

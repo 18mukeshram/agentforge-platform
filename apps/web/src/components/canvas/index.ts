@@ -5,6 +5,7 @@
 export { WorkflowCanvas } from "./workflow-canvas";
 export { Toolbar } from "./toolbar";
 export { NodePalette } from "./node-palette";
+export { ExecutionLogsPanel } from "./execution-logs-panel";
 
 // Nodes
 export {

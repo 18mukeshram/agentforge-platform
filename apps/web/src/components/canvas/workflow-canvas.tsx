@@ -18,14 +18,15 @@ import ReactFlow, {
   BackgroundVariant,
   ConnectionLineType,
 } from "reactflow";
-import { useCanvasStore, useWorkflowStore, useUiStore } from "@/stores";
-import { useUpdateWorkflow, useValidateWorkflowPayload } from "@/hooks";
+import { useCanvasStore, useWorkflowStore, useUiStore, useExecutionStore } from "@/stores";
+import { useUpdateWorkflow, useValidateWorkflowPayload, useExecuteWorkflow } from "@/hooks";
 import { nodeTypes } from "./nodes";
 import { getDefaultNodeConfig, getDefaultNodeLabel } from "./nodes/types";
 import { edgeTypes, ConnectionLine, validateConnection } from "./edges";
 import { toCanvasElements, fromCanvasElements } from "./utils";
 import { Toolbar } from "./toolbar";
 import { NodePalette } from "./node-palette";
+import { ExecutionLogsPanel } from "./execution-logs-panel";
 import { cn } from "@/lib/utils";
 import type { NodeType } from "@/types";
 
@@ -63,11 +64,15 @@ function WorkflowCanvasInner({ className }: WorkflowCanvasProps) {
     validationErrors,
   } = useWorkflowStore();
 
-  const { addNotification } = useUiStore();
+  const { addNotification, setExecutionPanelOpen } = useUiStore();
+
+  // Execution store
+  const { startExecution } = useExecutionStore();
 
   // Mutations
   const updateWorkflow = useUpdateWorkflow(workflow?.id ?? "");
   const validateWorkflow = useValidateWorkflowPayload();
+  const executeWorkflow = useExecuteWorkflow(workflow?.id ?? "");
 
   // Sync workflow to canvas on load
   useEffect(() => {
@@ -185,6 +190,57 @@ function WorkflowCanvasInner({ className }: WorkflowCanvasProps) {
       setValidating(false);
     }
   }, [workflow, validateWorkflow, setValidating, setValidationResult, setNodes, nodes, addNotification]);
+
+  // Handle run workflow
+  const handleRun = useCallback(async () => {
+    if (!workflow || workflow.status !== "valid") {
+      addNotification({
+        type: "warning",
+        title: "Cannot Run",
+        message: "Please validate the workflow first.",
+        duration: 3000,
+      });
+      return;
+    }
+
+    try {
+      const result = await executeWorkflow.mutateAsync({
+        inputs: {},
+      });
+
+      // Start execution in store
+      startExecution({
+        id: result.executionId,
+        workflowId: result.workflowId,
+        status: "pending",
+        workflowVersion: workflow.meta.version,
+        triggeredBy: "user",
+        createdAt: result.createdAt,
+        startedAt: null,
+        completedAt: null,
+        nodeStates: [],
+        inputs: {},
+        outputs: null,
+      });
+
+      // Open execution logs panel
+      setExecutionPanelOpen(true);
+
+      addNotification({
+        type: "success",
+        title: "Execution Started",
+        message: `Execution ${result.executionId.slice(0, 8)}... has been started.`,
+        duration: 3000,
+      });
+    } catch (error) {
+      addNotification({
+        type: "error",
+        title: "Execution Failed",
+        message: error instanceof Error ? error.message : "Failed to start execution",
+        duration: 5000,
+      });
+    }
+  }, [workflow, executeWorkflow, startExecution, setExecutionPanelOpen, addNotification]);
 
   // Handle node changes
   const handleNodesChange = useCallback(
@@ -363,10 +419,13 @@ function WorkflowCanvasInner({ className }: WorkflowCanvasProps) {
       </ReactFlow>
 
       {/* Canvas Toolbar */}
-      <Toolbar onSave={handleSave} onValidate={handleValidate} />
+      <Toolbar onSave={handleSave} onValidate={handleValidate} onRun={handleRun} />
 
       {/* Node Palette */}
       <NodePalette />
+
+      {/* Execution Logs Panel */}
+      <ExecutionLogsPanel />
     </div>
   );
 }

@@ -6,7 +6,7 @@
  */
 
 import { useReactFlow } from "reactflow";
-import { useCanvasStore, useUiStore } from "@/stores";
+import { useCanvasStore, useUiStore, useWorkflowStore } from "@/stores";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -19,19 +19,24 @@ import { cn } from "@/lib/utils";
 
 interface ToolbarProps {
   className?: string;
+  onSave?: () => void;
 }
 
-export function Toolbar({ className }: ToolbarProps) {
+export function Toolbar({ className, onSave }: ToolbarProps) {
   const reactFlow = useReactFlow();
 
   // Canvas store actions
   const { selectAll, deleteSelected, copySelected, paste, selectedNodeIds, selectedEdgeIds } =
     useCanvasStore();
 
+  // Workflow store state
+  const { isDirty, isSaving, workflow } = useWorkflowStore();
+
   // UI store actions
   const { nodePaletteOpen, toggleNodePalette } = useUiStore();
 
   const hasSelection = selectedNodeIds.length > 0 || selectedEdgeIds.length > 0;
+  const canSave = !!workflow && isDirty && !isSaving;
 
   // Zoom handlers
   const handleZoomIn = () => {
@@ -116,6 +121,33 @@ export function Toolbar({ className }: ToolbarProps) {
         <ToolbarButton tooltip="Paste" onClick={paste}>
           <ClipboardIcon className="h-4 w-4" />
         </ToolbarButton>
+
+        {/* Save Controls */}
+        {onSave && (
+          <>
+            <Separator orientation="vertical" className="mx-1 h-6" />
+
+            <ToolbarButton
+              tooltip={
+                isSaving
+                  ? "Saving..."
+                  : isDirty
+                    ? "Save Changes (Ctrl+S)"
+                    : "All changes saved"
+              }
+              onClick={onSave}
+              disabled={!canSave}
+            >
+              {isSaving ? (
+                <LoaderIcon className="h-4 w-4" />
+              ) : isDirty ? (
+                <SaveIcon className="h-4 w-4" />
+              ) : (
+                <CheckCircleIcon className="h-4 w-4 text-green-500" />
+              )}
+            </ToolbarButton>
+          </>
+        )}
       </div>
     </TooltipProvider>
   );
@@ -339,3 +371,58 @@ function ClipboardIcon({ className }: { className?: string }) {
     </svg>
   );
 }
+
+function SaveIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
+      <path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7" />
+      <path d="M7 3v4a1 1 0 0 0 1 1h7" />
+    </svg>
+  );
+}
+
+function LoaderIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={cn("animate-spin", className)}
+    >
+      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+    </svg>
+  );
+}
+
+function CheckCircleIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <circle cx="12" cy="12" r="10" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
+  );
+}
+

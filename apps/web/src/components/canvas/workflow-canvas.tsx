@@ -19,6 +19,7 @@ import ReactFlow, {
   ConnectionLineType,
 } from "reactflow";
 import { useCanvasStore, useWorkflowStore, useUiStore } from "@/stores";
+import { useUpdateWorkflow } from "@/hooks";
 import { nodeTypes } from "./nodes";
 import { getDefaultNodeConfig, getDefaultNodeLabel } from "./nodes/types";
 import { edgeTypes, ConnectionLine, validateConnection } from "./edges";
@@ -55,9 +56,14 @@ function WorkflowCanvasInner({ className }: WorkflowCanvasProps) {
     workflow,
     setNodes: setWorkflowNodes,
     setEdges: setWorkflowEdges,
+    setSaving,
+    setLastSavedAt,
   } = useWorkflowStore();
 
   const { addNotification } = useUiStore();
+
+  // Save mutation
+  const updateWorkflow = useUpdateWorkflow(workflow?.id ?? "");
 
   // Sync workflow to canvas on load
   useEffect(() => {
@@ -86,6 +92,35 @@ function WorkflowCanvasInner({ className }: WorkflowCanvasProps) {
       setWorkflowEdges(workflowEdges);
     }
   }, [nodes, edges, setWorkflowNodes, setWorkflowEdges]);
+
+  // Handle save workflow
+  const handleSave = useCallback(async () => {
+    if (!workflow) return;
+
+    setSaving(true);
+    try {
+      await updateWorkflow.mutateAsync({
+        nodes: workflow.nodes,
+        edges: workflow.edges,
+        version: workflow.meta.version,
+      });
+      setLastSavedAt(new Date().toISOString());
+      addNotification({
+        type: "success",
+        title: "Workflow Saved",
+        message: "Your changes have been saved successfully.",
+        duration: 3000,
+      });
+    } catch (error) {
+      addNotification({
+        type: "error",
+        title: "Save Failed",
+        message: error instanceof Error ? error.message : "Failed to save workflow",
+        duration: 5000,
+      });
+      setSaving(false);
+    }
+  }, [workflow, updateWorkflow, setSaving, setLastSavedAt, addNotification]);
 
   // Handle node changes
   const handleNodesChange = useCallback(
@@ -264,7 +299,7 @@ function WorkflowCanvasInner({ className }: WorkflowCanvasProps) {
       </ReactFlow>
 
       {/* Canvas Toolbar */}
-      <Toolbar />
+      <Toolbar onSave={handleSave} />
 
       {/* Node Palette */}
       <NodePalette />

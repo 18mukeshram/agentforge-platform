@@ -20,9 +20,10 @@ import { cn } from "@/lib/utils";
 interface ToolbarProps {
   className?: string;
   onSave?: () => void;
+  onValidate?: () => void;
 }
 
-export function Toolbar({ className, onSave }: ToolbarProps) {
+export function Toolbar({ className, onSave, onValidate }: ToolbarProps) {
   const reactFlow = useReactFlow();
 
   // Canvas store actions
@@ -30,13 +31,14 @@ export function Toolbar({ className, onSave }: ToolbarProps) {
     useCanvasStore();
 
   // Workflow store state
-  const { isDirty, isSaving, workflow } = useWorkflowStore();
+  const { isDirty, isSaving, isValidating, workflow } = useWorkflowStore();
 
   // UI store actions
   const { nodePaletteOpen, toggleNodePalette } = useUiStore();
 
   const hasSelection = selectedNodeIds.length > 0 || selectedEdgeIds.length > 0;
   const canSave = !!workflow && isDirty && !isSaving;
+  const canValidate = !!workflow && !isValidating;
 
   // Zoom handlers
   const handleZoomIn = () => {
@@ -144,6 +146,25 @@ export function Toolbar({ className, onSave }: ToolbarProps) {
                 <SaveIcon className="h-4 w-4" />
               ) : (
                 <CheckCircleIcon className="h-4 w-4 text-green-500" />
+              )}
+            </ToolbarButton>
+          </>
+        )}
+
+        {/* Validate Controls */}
+        {onValidate && (
+          <>
+            <Separator orientation="vertical" className="mx-1 h-6" />
+
+            <ToolbarButton
+              tooltip={isValidating ? "Validating..." : "Validate Workflow"}
+              onClick={onValidate}
+              disabled={!canValidate}
+            >
+              {isValidating ? (
+                <LoaderIcon className="h-4 w-4" />
+              ) : (
+                <ShieldCheckIcon className="h-4 w-4" />
               )}
             </ToolbarButton>
           </>
@@ -426,3 +447,20 @@ function CheckCircleIcon({ className }: { className?: string }) {
   );
 }
 
+function ShieldCheckIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
+  );
+}

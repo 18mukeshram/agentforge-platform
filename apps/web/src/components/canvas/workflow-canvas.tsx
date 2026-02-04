@@ -19,7 +19,7 @@ import ReactFlow, {
   ConnectionLineType,
 } from "reactflow";
 import { useCanvasStore, useWorkflowStore, useUiStore } from "@/stores";
-import { useUpdateWorkflow } from "@/hooks";
+import { useUpdateWorkflow, useValidateWorkflowPayload } from "@/hooks";
 import { nodeTypes } from "./nodes";
 import { getDefaultNodeConfig, getDefaultNodeLabel } from "./nodes/types";
 import { edgeTypes, ConnectionLine, validateConnection } from "./edges";
@@ -58,12 +58,16 @@ function WorkflowCanvasInner({ className }: WorkflowCanvasProps) {
     setEdges: setWorkflowEdges,
     setSaving,
     setLastSavedAt,
+    setValidating,
+    setValidationResult,
+    validationErrors,
   } = useWorkflowStore();
 
   const { addNotification } = useUiStore();
 
-  // Save mutation
+  // Mutations
   const updateWorkflow = useUpdateWorkflow(workflow?.id ?? "");
+  const validateWorkflow = useValidateWorkflowPayload();
 
   // Sync workflow to canvas on load
   useEffect(() => {
@@ -121,6 +125,66 @@ function WorkflowCanvasInner({ className }: WorkflowCanvasProps) {
       setSaving(false);
     }
   }, [workflow, updateWorkflow, setSaving, setLastSavedAt, addNotification]);
+
+  // Handle validate workflow
+  const handleValidate = useCallback(async () => {
+    if (!workflow) return;
+
+    setValidating(true);
+    try {
+      const result = await validateWorkflow.mutateAsync({
+        nodes: workflow.nodes,
+        edges: workflow.edges,
+      });
+
+      setValidationResult(result.errors, result.executionOrder);
+
+      // Map validation errors to canvas nodes
+      const errorsByNodeId = new Map<string, string[]>();
+      for (const error of result.errors) {
+        for (const nodeId of error.nodeIds) {
+          const existing = errorsByNodeId.get(nodeId) || [];
+          errorsByNodeId.set(nodeId, [...existing, error.message]);
+        }
+      }
+
+      // Update canvas nodes with validation errors
+      setNodes(
+        nodes.map((node) => ({
+          ...node,
+          data: {
+            ...node.data,
+            validationErrors: errorsByNodeId.get(node.id) || [],
+            isValid: !errorsByNodeId.has(node.id),
+          },
+        }))
+      );
+
+      if (result.valid) {
+        addNotification({
+          type: "success",
+          title: "Validation Passed",
+          message: "Workflow is valid and ready for execution.",
+          duration: 3000,
+        });
+      } else {
+        addNotification({
+          type: "warning",
+          title: "Validation Failed",
+          message: `Found ${result.errors.length} validation error(s).`,
+          duration: 5000,
+        });
+      }
+    } catch (error) {
+      addNotification({
+        type: "error",
+        title: "Validation Error",
+        message: error instanceof Error ? error.message : "Failed to validate workflow",
+        duration: 5000,
+      });
+      setValidating(false);
+    }
+  }, [workflow, validateWorkflow, setValidating, setValidationResult, setNodes, nodes, addNotification]);
 
   // Handle node changes
   const handleNodesChange = useCallback(
@@ -299,7 +363,7 @@ function WorkflowCanvasInner({ className }: WorkflowCanvasProps) {
       </ReactFlow>
 
       {/* Canvas Toolbar */}
-      <Toolbar onSave={handleSave} />
+      <Toolbar onSave={handleSave} onValidate={handleValidate} />
 
       {/* Node Palette */}
       <NodePalette />

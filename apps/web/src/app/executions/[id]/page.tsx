@@ -3,8 +3,10 @@
 /**
  * Execution details page.
  * Shows execution summary, event timeline, and per-node status.
+ * Includes failure diagnostics with error panels and node highlighting.
  */
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useExecution, useExecutionLogs } from "@/hooks";
 import { Button } from "@/components/ui/button";
@@ -20,6 +22,9 @@ export default function ExecutionDetailsPage({ params }: ExecutionDetailsPagePro
   const router = useRouter();
   const { data: execution, isLoading, error } = useExecution(params.id);
   const { data: logsData } = useExecutionLogs(params.id);
+  
+  // Selected node for highlighting
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   if (isLoading) {
     return (
@@ -39,6 +44,12 @@ export default function ExecutionDetailsPage({ params }: ExecutionDetailsPagePro
       </div>
     );
   }
+
+  // Find failed nodes for diagnostics
+  const failedNodes = execution.nodeStates.filter((n) => n.status === "failed");
+  const selectedNode = selectedNodeId 
+    ? execution.nodeStates.find((n) => n.nodeId === selectedNodeId) 
+    : null;
 
   return (
     <div className="flex flex-col gap-6 p-8">
@@ -63,16 +74,39 @@ export default function ExecutionDetailsPage({ params }: ExecutionDetailsPagePro
       {/* Summary Cards */}
       <ExecutionSummaryCards execution={execution} />
 
+      {/* Error Alert for Failed Executions */}
+      {execution.status === "failed" && failedNodes.length > 0 && (
+        <FailureAlertBanner 
+          failedNodes={failedNodes} 
+          onNodeClick={setSelectedNodeId}
+        />
+      )}
+
       {/* Main Content Grid */}
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Node Status */}
         <div className="lg:col-span-1">
-          <NodeStatusList nodes={execution.nodeStates} />
+          <NodeStatusList 
+            nodes={execution.nodeStates} 
+            selectedNodeId={selectedNodeId}
+            onNodeSelect={setSelectedNodeId}
+          />
         </div>
 
-        {/* Event Timeline */}
+        {/* Event Timeline or Error Details */}
         <div className="lg:col-span-2">
-          <ExecutionEventTimeline logs={logsData?.items || []} />
+          {selectedNode && selectedNode.status === "failed" ? (
+            <ErrorDetailsPanel 
+              node={selectedNode} 
+              onClose={() => setSelectedNodeId(null)}
+            />
+          ) : (
+            <ExecutionEventTimeline 
+              logs={logsData?.items || []} 
+              selectedNodeId={selectedNodeId}
+              onNodeClick={setSelectedNodeId}
+            />
+          )}
         </div>
       </div>
 
@@ -84,9 +118,181 @@ export default function ExecutionDetailsPage({ params }: ExecutionDetailsPagePro
   );
 }
 
+// Failure Alert Banner
+function FailureAlertBanner({
+  failedNodes,
+  onNodeClick,
+}: {
+  failedNodes: NodeExecutionState[];
+  onNodeClick: (nodeId: string) => void;
+}) {
+  return (
+    <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+      <div className="flex items-start gap-3">
+        <AlertTriangleIcon className="mt-0.5 h-5 w-5 text-red-500" />
+        <div className="flex-1">
+          <h4 className="font-semibold text-red-800">Execution Failed</h4>
+          <p className="mt-1 text-sm text-red-700">
+            {failedNodes.length} node{failedNodes.length > 1 ? "s" : ""} failed during execution.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {failedNodes.map((node) => (
+              <button
+                key={node.nodeId}
+                className="inline-flex items-center gap-1 rounded bg-red-100 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-200"
+                onClick={() => onNodeClick(node.nodeId)}
+              >
+                <XCircleIcon className="h-3 w-3" />
+                {node.nodeId.slice(0, 12)}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Error Details Panel
+function ErrorDetailsPanel({
+  node,
+  onClose,
+}: {
+  node: NodeExecutionState;
+  onClose: () => void;
+}) {
+  // Parse error for more details (may contain JSON or stack trace)
+  const errorInfo = parseError(node.error);
+
+  return (
+    <div className="rounded-lg border border-red-200 bg-card">
+      <div className="flex items-center justify-between border-b border-red-200 bg-red-50 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <XCircleIcon className="h-5 w-5 text-red-500" />
+          <h3 className="font-semibold text-red-800">Error Details</h3>
+        </div>
+        <Button variant="ghost" size="sm" onClick={onClose}>
+          Back to Timeline
+        </Button>
+      </div>
+      
+      <div className="space-y-4 p-4">
+        {/* Node Info */}
+        <div className="rounded-lg bg-muted/50 p-3">
+          <div className="grid gap-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Node ID</span>
+              <span className="font-mono font-medium">{node.nodeId}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Status</span>
+              <NodeStatusBadge status={node.status} />
+            </div>
+            {node.retryCount > 0 && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Retry Count</span>
+                <span className="font-medium">{node.retryCount}</span>
+              </div>
+            )}
+            {node.startedAt && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Started At</span>
+                <span className="font-mono text-xs">{new Date(node.startedAt).toLocaleString()}</span>
+              </div>
+            )}
+            {node.completedAt && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Failed At</span>
+                <span className="font-mono text-xs">{new Date(node.completedAt).toLocaleString()}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Error Message */}
+        <div>
+          <h4 className="mb-2 text-sm font-semibold text-red-800">Error Message</h4>
+          <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
+            {errorInfo.message || "Unknown error"}
+          </div>
+        </div>
+
+        {/* Error Type */}
+        {errorInfo.type && (
+          <div>
+            <h4 className="mb-2 text-sm font-semibold text-muted-foreground">Error Type</h4>
+            <code className="rounded bg-muted px-2 py-1 text-sm">{errorInfo.type}</code>
+          </div>
+        )}
+
+        {/* Stack Trace */}
+        {errorInfo.stack && (
+          <div>
+            <h4 className="mb-2 text-sm font-semibold text-muted-foreground">Stack Trace</h4>
+            <ScrollArea className="h-40">
+              <pre className="rounded-lg bg-gray-900 p-3 text-xs text-gray-100">
+                {errorInfo.stack}
+              </pre>
+            </ScrollArea>
+          </div>
+        )}
+
+        {/* Raw Error (if structured) */}
+        {errorInfo.raw && (
+          <div>
+            <h4 className="mb-2 text-sm font-semibold text-muted-foreground">Raw Error Data</h4>
+            <ScrollArea className="h-32">
+              <pre className="rounded-lg bg-muted p-3 text-xs">
+                {JSON.stringify(errorInfo.raw, null, 2) || ""}
+              </pre>
+            </ScrollArea>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Parse error string for structured information
+function parseError(error: string | null): {
+  message: string | null;
+  type: string | null;
+  stack: string | null;
+  raw: Record<string, unknown> | null;
+} {
+  if (!error) {
+    return { message: null, type: null, stack: null, raw: null };
+  }
+
+  // Try to parse as JSON
+  try {
+    const parsed = JSON.parse(error);
+    return {
+      message: parsed.message || parsed.error || error,
+      type: parsed.type || parsed.name || null,
+      stack: parsed.stack || parsed.traceback || null,
+      raw: parsed,
+    };
+  } catch {
+    // Check for stack trace pattern
+    const stackMatch = error.match(/^(.+?)\n((?:\s+at .+\n?)+)/m);
+    if (stackMatch) {
+      return {
+        message: stackMatch[1],
+        type: null,
+        stack: stackMatch[2],
+        raw: null,
+      };
+    }
+
+    return { message: error, type: null, stack: null, raw: null };
+  }
+}
+
 // Execution Summary Cards
 function ExecutionSummaryCards({ execution }: { execution: Execution }) {
   const duration = calculateDuration(execution.createdAt, execution.completedAt);
+  const failedCount = execution.nodeStates.filter((n) => n.status === "failed").length;
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -107,8 +313,9 @@ function ExecutionSummaryCards({ execution }: { execution: Execution }) {
       />
       <SummaryCard
         label="Nodes"
-        value={`${execution.nodeStates.length} total`}
+        value={failedCount > 0 ? `${failedCount} failed / ${execution.nodeStates.length}` : `${execution.nodeStates.length} total`}
         icon={<NodesIcon className="h-4 w-4 text-muted-foreground" />}
+        highlight={failedCount > 0 ? "error" : undefined}
       />
     </div>
   );
@@ -118,24 +325,41 @@ function SummaryCard({
   label,
   value,
   icon,
+  highlight,
 }: {
   label: string;
   value: string;
   icon: React.ReactNode;
+  highlight?: "error" | "warning";
 }) {
   return (
-    <div className="rounded-lg border bg-card p-4">
+    <div className={cn(
+      "rounded-lg border bg-card p-4",
+      highlight === "error" && "border-red-200 bg-red-50",
+      highlight === "warning" && "border-yellow-200 bg-yellow-50"
+    )}>
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         {icon}
         {label}
       </div>
-      <p className="mt-1 text-lg font-semibold capitalize">{value}</p>
+      <p className={cn(
+        "mt-1 text-lg font-semibold capitalize",
+        highlight === "error" && "text-red-700"
+      )}>{value}</p>
     </div>
   );
 }
 
 // Node Status List
-function NodeStatusList({ nodes }: { nodes: NodeExecutionState[] }) {
+function NodeStatusList({ 
+  nodes,
+  selectedNodeId,
+  onNodeSelect,
+}: { 
+  nodes: NodeExecutionState[];
+  selectedNodeId: string | null;
+  onNodeSelect: (nodeId: string) => void;
+}) {
   return (
     <div className="rounded-lg border bg-card">
       <div className="border-b px-4 py-3">
@@ -147,9 +371,15 @@ function NodeStatusList({ nodes }: { nodes: NodeExecutionState[] }) {
             <p className="text-sm text-muted-foreground">No nodes</p>
           ) : (
             nodes.map((node) => (
-              <div
+              <button
                 key={node.nodeId}
-                className="flex items-center justify-between rounded-lg border p-3"
+                className={cn(
+                  "flex w-full items-center justify-between rounded-lg border p-3 text-left transition-colors",
+                  "hover:bg-muted/50",
+                  node.status === "failed" && "border-red-200 bg-red-50 hover:bg-red-100",
+                  selectedNodeId === node.nodeId && "ring-2 ring-primary"
+                )}
+                onClick={() => onNodeSelect(node.nodeId)}
               >
                 <div className="flex items-center gap-2">
                   <NodeStatusIcon status={node.status} />
@@ -163,7 +393,7 @@ function NodeStatusList({ nodes }: { nodes: NodeExecutionState[] }) {
                   )}
                   <NodeStatusBadge status={node.status} />
                 </div>
-              </div>
+              </button>
             ))
           )}
         </div>
@@ -175,8 +405,12 @@ function NodeStatusList({ nodes }: { nodes: NodeExecutionState[] }) {
 // Execution Event Timeline
 function ExecutionEventTimeline({
   logs,
+  selectedNodeId,
+  onNodeClick,
 }: {
   logs: { timestamp: string; nodeId: string; level: string; message: string }[];
+  selectedNodeId: string | null;
+  onNodeClick: (nodeId: string) => void;
 }) {
   return (
     <div className="rounded-lg border bg-card">
@@ -189,21 +423,23 @@ function ExecutionEventTimeline({
             <p className="text-sm text-muted-foreground">No events recorded</p>
           ) : (
             logs.map((log, index) => (
-              <div
+              <button
                 key={index}
                 className={cn(
-                  "rounded px-3 py-2 font-mono text-xs",
-                  log.level === "error" && "bg-destructive/10 text-destructive",
-                  log.level === "warn" && "bg-yellow-500/10 text-yellow-600",
-                  log.level === "info" && "bg-muted"
+                  "w-full rounded px-3 py-2 text-left font-mono text-xs transition-colors",
+                  log.level === "error" && "bg-destructive/10 text-destructive hover:bg-destructive/20",
+                  log.level === "warn" && "bg-yellow-500/10 text-yellow-600 hover:bg-yellow-500/20",
+                  log.level === "info" && "bg-muted hover:bg-muted/80",
+                  selectedNodeId === log.nodeId && "ring-2 ring-primary"
                 )}
+                onClick={() => onNodeClick(log.nodeId)}
               >
                 <span className="text-muted-foreground">
                   [{new Date(log.timestamp).toLocaleTimeString()}]
                 </span>{" "}
                 <span className="font-medium">{log.nodeId}:</span>{" "}
                 {log.message}
-              </div>
+              </button>
             ))
           )}
         </div>
@@ -413,6 +649,16 @@ function CircleIcon({ className }: { className?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <circle cx="12" cy="12" r="10" />
+    </svg>
+  );
+}
+
+function AlertTriangleIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" />
+      <path d="M12 9v4" />
+      <path d="M12 17h.01" />
     </svg>
   );
 }

@@ -2,26 +2,23 @@
 
 """Workflow CRUD routes with authentication and tenant isolation."""
 
-from fastapi import APIRouter, Query, Depends
+from fastapi import APIRouter, Depends, Query
 
-from agentforge_api.models import WorkflowStatus
-from agentforge_api.services.workflow_service import workflow_service
 from agentforge_api.auth import (
     Auth,
-    Role,
-    require_role,
-    require_write_access,
     require_admin_access,
+    require_write_access,
 )
+from agentforge_api.models import WorkflowStatus
 from agentforge_api.routes.dto import (
     CreateWorkflowRequest,
     UpdateWorkflowRequest,
+    WorkflowDeleteResponse,
+    WorkflowListResponse,
     WorkflowResponse,
     WorkflowSummary,
-    WorkflowListResponse,
-    WorkflowDeleteResponse,
 )
-
+from agentforge_api.services.workflow_service import workflow_service
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
 
@@ -58,7 +55,7 @@ async def create_workflow(
 ) -> WorkflowResponse:
     """
     Create a new workflow.
-    
+
     Requires: MEMBER, ADMIN, or OWNER role.
     Runs structural validation on creation.
     Saves even if invalid (status will be 'invalid').
@@ -71,7 +68,7 @@ async def create_workflow(
         owner_id=auth.user_id,
         tenant_id=auth.tenant_id,
     )
-    
+
     return workflow_to_response(workflow, errors)
 
 
@@ -84,7 +81,7 @@ async def list_workflows(
 ) -> WorkflowListResponse:
     """
     List workflows for the current tenant.
-    
+
     Requires: Any authenticated role (VIEWER+).
     Only returns workflows belonging to the user's tenant.
     """
@@ -94,7 +91,7 @@ async def list_workflows(
         limit=limit,
         cursor=cursor,
     )
-    
+
     items = [
         WorkflowSummary(
             id=w.id,
@@ -105,7 +102,7 @@ async def list_workflows(
         )
         for w in workflows
     ]
-    
+
     return WorkflowListResponse(items=items, next_cursor=next_cursor)
 
 
@@ -116,7 +113,7 @@ async def get_workflow(
 ) -> WorkflowResponse:
     """
     Get a workflow by ID.
-    
+
     Requires: Any authenticated role (VIEWER+).
     Returns full workflow with nodes, edges, and validation errors.
     Enforces tenant isolation.
@@ -126,7 +123,7 @@ async def get_workflow(
         tenant_id=auth.tenant_id,
     )
     errors = workflow_service.get_validation_errors(workflow_id)
-    
+
     return workflow_to_response(workflow, errors)
 
 
@@ -142,7 +139,7 @@ async def update_workflow(
 ) -> WorkflowResponse:
     """
     Update a workflow.
-    
+
     Requires: MEMBER, ADMIN, or OWNER role.
     Requires version for optimistic concurrency control.
     Runs structural validation on update.
@@ -157,7 +154,7 @@ async def update_workflow(
         name=request.name,
         description=request.description,
     )
-    
+
     return workflow_to_response(workflow, errors)
 
 
@@ -172,7 +169,7 @@ async def delete_workflow(
 ) -> WorkflowDeleteResponse:
     """
     Soft-delete a workflow.
-    
+
     Requires: ADMIN or OWNER role.
     Sets status to 'archived'. Can be restored via update.
     Enforces tenant isolation.
@@ -181,7 +178,7 @@ async def delete_workflow(
         workflow_id=workflow_id,
         tenant_id=auth.tenant_id,
     )
-    
+
     return WorkflowDeleteResponse(
         id=workflow.id,
         status=workflow.status,

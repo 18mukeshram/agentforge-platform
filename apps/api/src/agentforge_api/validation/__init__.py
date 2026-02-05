@@ -5,8 +5,8 @@
 # Graph utilities
 from agentforge_api.validation.graph import (
     AdjacencyList,
-    ReverseAdjacencyList,
     InDegreeMap,
+    ReverseAdjacencyList,
     build_adjacency_list,
     build_reverse_adjacency_list,
     compute_in_degrees,
@@ -14,24 +14,24 @@ from agentforge_api.validation.graph import (
     find_exit_nodes,
 )
 
-# Topological sort
-from agentforge_api.validation.topological import (
-    TopologicalSortResult,
-    TopologicalSortFailure,
-    topological_sort,
-    get_execution_order,
-    compute_execution_levels,
-)
-
 # Semantic types
 from agentforge_api.validation.semantic import AgentRegistry
+
+# Topological sort
+from agentforge_api.validation.topological import (
+    TopologicalSortFailure,
+    TopologicalSortResult,
+    compute_execution_levels,
+    get_execution_order,
+    topological_sort,
+)
 
 # Composed validator
 from agentforge_api.validation.validator import (
     ValidateWorkflowOptions,
     validate_workflow,
-    validate_workflow_structure,
     validate_workflow_full,
+    validate_workflow_structure,
 )
 
 __all__ = [

@@ -9,10 +9,10 @@ Each validator is a pure function returning a ValidationResult.
 from collections import deque
 
 from agentforge_api.models import (
-    Workflow,
-    ValidationResult,
     ValidationError,
     ValidationErrorCode,
+    ValidationResult,
+    Workflow,
 )
 from agentforge_api.validation.graph import (
     build_adjacency_list,
@@ -31,20 +31,24 @@ def validate_edge_references(workflow: Workflow) -> ValidationResult:
 
     for edge in workflow.edges:
         if edge.source not in node_ids:
-            errors.append(ValidationError(
-                code=ValidationErrorCode.INVALID_EDGE_REFERENCE,
-                message=f"Edge references non-existent source node: {edge.source}",
-                edge_ids=[edge.id],
-                node_ids=[edge.source],
-            ))
+            errors.append(
+                ValidationError(
+                    code=ValidationErrorCode.INVALID_EDGE_REFERENCE,
+                    message=f"Edge references non-existent source node: {edge.source}",
+                    edge_ids=[edge.id],
+                    node_ids=[edge.source],
+                )
+            )
 
         if edge.target not in node_ids:
-            errors.append(ValidationError(
-                code=ValidationErrorCode.INVALID_EDGE_REFERENCE,
-                message=f"Edge references non-existent target node: {edge.target}",
-                edge_ids=[edge.id],
-                node_ids=[edge.target],
-            ))
+            errors.append(
+                ValidationError(
+                    code=ValidationErrorCode.INVALID_EDGE_REFERENCE,
+                    message=f"Edge references non-existent target node: {edge.target}",
+                    edge_ids=[edge.id],
+                    node_ids=[edge.target],
+                )
+            )
 
     if errors:
         return ValidationResult.failure(errors)
@@ -63,11 +67,13 @@ def validate_no_duplicate_edges(workflow: Workflow) -> ValidationResult:
         existing = seen.get(key)
 
         if existing is not None:
-            errors.append(ValidationError(
-                code=ValidationErrorCode.DUPLICATE_EDGE,
-                message="Duplicate edge between same ports",
-                edge_ids=[existing, edge.id],
-            ))
+            errors.append(
+                ValidationError(
+                    code=ValidationErrorCode.DUPLICATE_EDGE,
+                    message="Duplicate edge between same ports",
+                    edge_ids=[existing, edge.id],
+                )
+            )
         else:
             seen[key] = edge.id
 
@@ -81,18 +87,26 @@ def validate_has_entry_node(workflow: Workflow) -> ValidationResult:
     S4: Workflow must have at least one entry node.
     """
     if len(workflow.nodes) == 0:
-        return ValidationResult.failure([ValidationError(
-            code=ValidationErrorCode.NO_ENTRY_NODE,
-            message="Workflow has no nodes",
-        )])
+        return ValidationResult.failure(
+            [
+                ValidationError(
+                    code=ValidationErrorCode.NO_ENTRY_NODE,
+                    message="Workflow has no nodes",
+                )
+            ]
+        )
 
     entries = find_entry_nodes(workflow)
 
     if len(entries) == 0:
-        return ValidationResult.failure([ValidationError(
-            code=ValidationErrorCode.NO_ENTRY_NODE,
-            message="Workflow has no entry nodes (all nodes have incoming edges)",
-        )])
+        return ValidationResult.failure(
+            [
+                ValidationError(
+                    code=ValidationErrorCode.NO_ENTRY_NODE,
+                    message="Workflow has no entry nodes (all nodes have incoming edges)",
+                )
+            ]
+        )
 
     return ValidationResult.success()
 
@@ -147,11 +161,15 @@ def validate_no_orphans(workflow: Workflow) -> ValidationResult:
     ]
 
     if orphans:
-        return ValidationResult.failure([ValidationError(
-            code=ValidationErrorCode.ORPHAN_NODE,
-            message=f"Found {len(orphans)} orphan node(s) not connected to workflow",
-            node_ids=orphans,
-        )])
+        return ValidationResult.failure(
+            [
+                ValidationError(
+                    code=ValidationErrorCode.ORPHAN_NODE,
+                    message=f"Found {len(orphans)} orphan node(s) not connected to workflow",
+                    node_ids=orphans,
+                )
+            ]
+        )
 
     return ValidationResult.success()
 
@@ -194,10 +212,14 @@ def validate_no_cycles(workflow: Workflow) -> ValidationResult:
 
     for node in workflow.nodes:
         if state.get(node.id, 0) == 0 and dfs(node.id):
-            return ValidationResult.failure([ValidationError(
-                code=ValidationErrorCode.CYCLE_DETECTED,
-                message="Workflow contains a cycle",
-                node_ids=cycle_nodes,
-            )])
+            return ValidationResult.failure(
+                [
+                    ValidationError(
+                        code=ValidationErrorCode.CYCLE_DETECTED,
+                        message="Workflow contains a cycle",
+                        node_ids=cycle_nodes,
+                    )
+                ]
+            )
 
     return ValidationResult.success()

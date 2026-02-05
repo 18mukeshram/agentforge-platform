@@ -6,10 +6,14 @@ Integration test for execution flow.
 Tests the complete flow from workflow creation to execution.
 """
 
-from httpx import ASGITransport, AsyncClient
 import pytest
+from datetime import UTC, datetime, timedelta
+
+from httpx import ASGITransport, AsyncClient
 
 from agentforge_api.main import app
+from agentforge_api.auth.dependencies import get_auth_context
+from agentforge_api.auth.models import AuthContext, Role
 from agentforge_api.services.execution_service import execution_service
 from agentforge_api.services.orchestrator import orchestrator
 from agentforge_api.services.queue import job_queue
@@ -30,9 +34,22 @@ async def cleanup():
 @pytest.fixture
 async def client():
     """Create test client."""
+    async def mock_get_auth_context() -> AuthContext:
+        """Mock authenticated user."""
+        return AuthContext(
+            user_id="test_user",
+            tenant_id="test_tenant",
+            role=Role.OWNER,
+            exp=datetime.now(UTC) + timedelta(hours=1),
+        )
+
+    app.dependency_overrides[get_auth_context] = mock_get_auth_context
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
+
+    app.dependency_overrides.clear()
 
 
 @pytest.mark.asyncio
@@ -57,15 +74,15 @@ async def test_create_and_execute_workflow(client: AsyncClient):
                 "type": "input",
                 "label": "Input Node",
                 "position": {"x": 0, "y": 0},
-                "config": {}
+                "config": {},
             },
             {
                 "id": "node_2",
                 "type": "output",
                 "label": "Output Node",
                 "position": {"x": 200, "y": 0},
-                "config": {}
-            }
+                "config": {},
+            },
         ],
         "edges": [
             {
@@ -73,9 +90,9 @@ async def test_create_and_execute_workflow(client: AsyncClient):
                 "source": "node_1",
                 "source_port": "output",
                 "target": "node_2",
-                "target_port": "input"
+                "target_port": "input",
             }
-        ]
+        ],
     }
 
     response = await client.post("/api/v1/workflows", json=workflow_data)
@@ -94,13 +111,10 @@ async def test_create_and_execute_workflow(client: AsyncClient):
     assert validation["execution_order"] == ["node_1", "node_2"]
 
     # 3. Execute the workflow
-    execute_data = {
-        "inputs": {"message": "Hello, World!"}
-    }
+    execute_data = {"inputs": {"message": "Hello, World!"}}
 
     response = await client.post(
-        f"/api/v1/executions/workflows/{workflow_id}/execute",
-        json=execute_data
+        f"/api/v1/executions/workflows/{workflow_id}/execute", json=execute_data
     )
     assert response.status_code == 202
 
@@ -137,10 +151,10 @@ async def test_cancel_execution(client: AsyncClient):
                 "type": "input",
                 "label": "Input",
                 "position": {"x": 0, "y": 0},
-                "config": {}
+                "config": {},
             }
         ],
-        "edges": []
+        "edges": [],
     }
 
     response = await client.post("/api/v1/workflows", json=workflow_data)
@@ -148,8 +162,7 @@ async def test_cancel_execution(client: AsyncClient):
 
     # Execute
     response = await client.post(
-        f"/api/v1/executions/workflows/{workflow_id}/execute",
-        json={"inputs": {}}
+        f"/api/v1/executions/workflows/{workflow_id}/execute", json={"inputs": {}}
     )
     execution_id = response.json()["execution_id"]
 

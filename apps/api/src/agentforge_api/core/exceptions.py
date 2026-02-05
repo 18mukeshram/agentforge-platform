@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 class ErrorCode(str, Enum):
     """API error codes."""
-    
+
     # Request errors (4xx)
     INVALID_REQUEST_BODY = "INVALID_REQUEST_BODY"
     VALIDATION_ERROR = "VALIDATION_ERROR"
@@ -26,18 +26,18 @@ class ErrorCode(str, Enum):
     VERSION_CONFLICT = "VERSION_CONFLICT"
     INVALID_CURSOR = "INVALID_CURSOR"
     RESUME_NOT_ALLOWED = "RESUME_NOT_ALLOWED"
-    
+
     # Auth errors
     UNAUTHORIZED = "UNAUTHORIZED"
     FORBIDDEN = "FORBIDDEN"
-    
+
     # Server errors (5xx)
     INTERNAL_ERROR = "INTERNAL_ERROR"
 
 
 class ErrorDetail(BaseModel):
     """Detailed error information."""
-    
+
     field: str | None = None
     message: str
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -45,7 +45,7 @@ class ErrorDetail(BaseModel):
 
 class ErrorResponse(BaseModel):
     """Structured API error response."""
-    
+
     code: ErrorCode
     message: str
     details: list[ErrorDetail] = Field(default_factory=list)
@@ -54,7 +54,7 @@ class ErrorResponse(BaseModel):
 
 class APIException(Exception):
     """Base exception for all API errors."""
-    
+
     def __init__(
         self,
         code: ErrorCode,
@@ -67,7 +67,7 @@ class APIException(Exception):
         self.message = message
         self.status_code = status_code
         self.details = details or []
-    
+
     def to_response(self, request_id: str | None = None) -> ErrorResponse:
         """Convert exception to error response."""
         return ErrorResponse(
@@ -83,7 +83,7 @@ class APIException(Exception):
 
 class NotFoundError(APIException):
     """Resource not found (404)."""
-    
+
     def __init__(
         self,
         resource: str,
@@ -101,7 +101,7 @@ class NotFoundError(APIException):
 
 class WorkflowNotFoundError(NotFoundError):
     """Workflow not found."""
-    
+
     def __init__(self, workflow_id: str) -> None:
         super().__init__(
             resource="Workflow",
@@ -112,7 +112,7 @@ class WorkflowNotFoundError(NotFoundError):
 
 class ExecutionNotFoundError(NotFoundError):
     """Execution not found."""
-    
+
     def __init__(self, execution_id: str) -> None:
         super().__init__(
             resource="Execution",
@@ -123,7 +123,7 @@ class ExecutionNotFoundError(NotFoundError):
 
 class WorkflowInvalidError(APIException):
     """Workflow failed validation, cannot execute."""
-    
+
     def __init__(
         self,
         message: str = "Workflow is invalid and cannot be executed",
@@ -139,7 +139,7 @@ class WorkflowInvalidError(APIException):
 
 class WorkflowArchivedError(APIException):
     """Workflow is archived, cannot be modified or executed."""
-    
+
     def __init__(self, workflow_id: str) -> None:
         super().__init__(
             code=ErrorCode.WORKFLOW_ARCHIVED,
@@ -150,7 +150,7 @@ class WorkflowArchivedError(APIException):
 
 class VersionConflictError(APIException):
     """Optimistic concurrency conflict."""
-    
+
     def __init__(
         self,
         expected_version: int,
@@ -167,7 +167,7 @@ class VersionConflictError(APIException):
 
 class MissingInputsError(APIException):
     """Required execution inputs not provided."""
-    
+
     def __init__(self, missing_inputs: list[str]) -> None:
         super().__init__(
             code=ErrorCode.MISSING_INPUTS,
@@ -183,7 +183,7 @@ class MissingInputsError(APIException):
 
 class UnauthorizedError(APIException):
     """Authentication required."""
-    
+
     def __init__(self, message: str = "Authentication required") -> None:
         super().__init__(
             code=ErrorCode.UNAUTHORIZED,
@@ -194,7 +194,7 @@ class UnauthorizedError(APIException):
 
 class ForbiddenError(APIException):
     """Access denied."""
-    
+
     def __init__(self, message: str = "Access denied") -> None:
         super().__init__(
             code=ErrorCode.FORBIDDEN,
@@ -205,7 +205,7 @@ class ForbiddenError(APIException):
 
 class ResumeNotAllowedError(APIException):
     """Execution cannot be resumed."""
-    
+
     def __init__(self, execution_id: str, reason: str) -> None:
         super().__init__(
             code=ErrorCode.RESUME_NOT_ALLOWED,

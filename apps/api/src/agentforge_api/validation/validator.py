@@ -102,7 +102,9 @@ def validate_workflow(
 
     if options.agent_registry is not None:
         # M1: Type compatibility
-        if collect_errors(validate_type_compatibility(workflow, options.agent_registry)):
+        if collect_errors(
+            validate_type_compatibility(workflow, options.agent_registry)
+        ):
             return ValidationResult.failure(all_errors)
 
         # M2: Required inputs satisfied
@@ -123,10 +125,13 @@ def validate_workflow_structure(workflow: Workflow) -> ValidationResult:
     Quick structural-only validation.
     Use for fast feedback during editing.
     """
-    return validate_workflow(workflow, ValidateWorkflowOptions(
-        agent_registry=None,
-        fail_fast=False,
-    ))
+    return validate_workflow(
+        workflow,
+        ValidateWorkflowOptions(
+            agent_registry=None,
+            fail_fast=False,
+        ),
+    )
 
 
 def validate_workflow_full(
@@ -137,7 +142,10 @@ def validate_workflow_full(
     Full validation including semantics.
     Use before execution.
     """
-    return validate_workflow(workflow, ValidateWorkflowOptions(
-        agent_registry=agent_registry,
-        fail_fast=False,
-    ))
+    return validate_workflow(
+        workflow,
+        ValidateWorkflowOptions(
+            agent_registry=agent_registry,
+            fail_fast=False,
+        ),
+    )

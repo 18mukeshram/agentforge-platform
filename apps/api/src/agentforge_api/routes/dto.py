@@ -8,21 +8,20 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from agentforge_api.models import (
-    Node,
     Edge,
-    WorkflowStatus,
     ExecutionStatus,
+    Node,
     NodeExecutionStatus,
     ValidationError,
+    WorkflowStatus,
 )
-
 
 # === Workflow DTOs (existing) ===
 
 
 class CreateWorkflowRequest(BaseModel):
     """Request body for creating a workflow."""
-    
+
     name: str = Field(..., min_length=1, max_length=255)
     description: str = ""
     nodes: list[Node] = Field(default_factory=list)
@@ -31,17 +30,19 @@ class CreateWorkflowRequest(BaseModel):
 
 class UpdateWorkflowRequest(BaseModel):
     """Request body for updating a workflow."""
-    
+
     name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
     nodes: list[Node]
     edges: list[Edge]
-    version: int = Field(..., ge=1, description="Current version for optimistic locking")
+    version: int = Field(
+        ..., ge=1, description="Current version for optimistic locking"
+    )
 
 
 class WorkflowResponse(BaseModel):
     """Full workflow response."""
-    
+
     id: str
     status: WorkflowStatus
     name: str
@@ -57,7 +58,7 @@ class WorkflowResponse(BaseModel):
 
 class WorkflowSummary(BaseModel):
     """Workflow summary for list responses."""
-    
+
     id: str
     name: str
     status: WorkflowStatus
@@ -67,14 +68,14 @@ class WorkflowSummary(BaseModel):
 
 class WorkflowListResponse(BaseModel):
     """Response for workflow list endpoint."""
-    
+
     items: list[WorkflowSummary]
     next_cursor: str | None = None
 
 
 class WorkflowDeleteResponse(BaseModel):
     """Response for workflow deletion."""
-    
+
     id: str
     status: WorkflowStatus
 
@@ -84,7 +85,7 @@ class WorkflowDeleteResponse(BaseModel):
 
 class ExecuteWorkflowRequest(BaseModel):
     """Request body for triggering workflow execution."""
-    
+
     inputs: dict[str, Any] = Field(
         default_factory=dict,
         description="Input values for workflow entry nodes",
@@ -93,7 +94,7 @@ class ExecuteWorkflowRequest(BaseModel):
 
 class NodeExecutionStateResponse(BaseModel):
     """Execution state for a single node."""
-    
+
     node_id: str
     status: NodeExecutionStatus
     started_at: datetime | None = None
@@ -105,7 +106,7 @@ class NodeExecutionStateResponse(BaseModel):
 
 class ExecutionResponse(BaseModel):
     """Full execution response."""
-    
+
     id: str
     workflow_id: str
     status: ExecutionStatus
@@ -121,7 +122,7 @@ class ExecutionResponse(BaseModel):
 
 class ExecutionSummary(BaseModel):
     """Execution summary for list responses."""
-    
+
     id: str
     workflow_id: str
     status: ExecutionStatus
@@ -131,14 +132,14 @@ class ExecutionSummary(BaseModel):
 
 class ExecutionListResponse(BaseModel):
     """Response for execution list endpoint."""
-    
+
     items: list[ExecutionSummary]
     next_cursor: str | None = None
 
 
 class ExecutionTriggerResponse(BaseModel):
     """Response when execution is triggered (202 Accepted)."""
-    
+
     execution_id: str
     status: ExecutionStatus
     workflow_id: str
@@ -147,14 +148,14 @@ class ExecutionTriggerResponse(BaseModel):
 
 class ExecutionCancelResponse(BaseModel):
     """Response for execution cancellation."""
-    
+
     id: str
     status: ExecutionStatus
 
 
 class LogEntry(BaseModel):
     """A single log entry from execution."""
-    
+
     timestamp: datetime
     node_id: str
     level: str  # "info" | "warn" | "error"
@@ -163,7 +164,7 @@ class LogEntry(BaseModel):
 
 class ExecutionLogsResponse(BaseModel):
     """Response for execution logs endpoint."""
-    
+
     items: list[LogEntry]
     next_cursor: str | None = None
 
@@ -173,7 +174,7 @@ class ExecutionLogsResponse(BaseModel):
 
 class ResumeExecutionRequest(BaseModel):
     """Request body for resuming a failed execution."""
-    
+
     node_id: str = Field(
         ...,
         description="Node ID to resume from (must be a failed node)",
@@ -182,12 +183,14 @@ class ResumeExecutionRequest(BaseModel):
 
 class ResumeExecutionResponse(BaseModel):
     """Response for resume execution endpoint."""
-    
+
     execution_id: str = Field(description="New execution ID")
     parent_execution_id: str = Field(description="Original failed execution ID")
     resumed_from_node_id: str = Field(description="Node ID resumed from")
     workflow_id: str
     workflow_version: int
-    skipped_nodes: list[str] = Field(description="Nodes that will be skipped (already completed)")
+    skipped_nodes: list[str] = Field(
+        description="Nodes that will be skipped (already completed)"
+    )
     rerun_nodes: list[str] = Field(description="Nodes that will be re-executed")
     status: ExecutionStatus = ExecutionStatus.PENDING

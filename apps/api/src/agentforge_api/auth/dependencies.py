@@ -6,9 +6,9 @@ from typing import Annotated
 
 from fastapi import Depends, Header, Query, WebSocket
 
-from agentforge_api.auth.models import AuthContext, Role
 from agentforge_api.auth.jwt import create_auth_context
-from agentforge_api.core.exceptions import UnauthorizedError, ForbiddenError
+from agentforge_api.auth.models import AuthContext, Role
+from agentforge_api.core.exceptions import ForbiddenError, UnauthorizedError
 
 
 def extract_token_from_header(
@@ -16,16 +16,18 @@ def extract_token_from_header(
 ) -> str:
     """
     Extract JWT token from Authorization header.
-    
+
     Expects: Authorization: Bearer <token>
     """
     if not authorization:
         raise UnauthorizedError("Missing Authorization header")
-    
+
     parts = authorization.split(" ")
     if len(parts) != 2 or parts[0].lower() != "bearer":
-        raise UnauthorizedError("Invalid Authorization header format. Expected: Bearer <token>")
-    
+        raise UnauthorizedError(
+            "Invalid Authorization header format. Expected: Bearer <token>"
+        )
+
     return parts[1]
 
 
@@ -34,7 +36,7 @@ async def get_auth_context(
 ) -> AuthContext:
     """
     Dependency to get authenticated user context.
-    
+
     Verifies JWT and returns AuthContext.
     """
     return create_auth_context(token)
@@ -47,19 +49,20 @@ Auth = Annotated[AuthContext, Depends(get_auth_context)]
 def require_role(*allowed_roles: Role):
     """
     Dependency factory to require specific roles.
-    
+
     Usage:
         @router.post("/", dependencies=[Depends(require_role(Role.ADMIN, Role.OWNER))])
         async def create_something(auth: Auth):
             ...
     """
+
     async def check_role(auth: Auth) -> AuthContext:
         if auth.role not in allowed_roles:
             raise ForbiddenError(
                 f"Role {auth.role.value} not authorized. Required: {[r.value for r in allowed_roles]}"
             )
         return auth
-    
+
     return check_role
 
 
@@ -83,13 +86,13 @@ async def get_websocket_auth(
 ) -> AuthContext:
     """
     Authenticate WebSocket connection.
-    
+
     Token passed as query parameter: /ws/executions?token=<jwt>
     """
     if not token:
         await websocket.close(code=4001, reason="Missing token")
         raise UnauthorizedError("Missing token")
-    
+
     try:
         return create_auth_context(token)
     except UnauthorizedError as e:

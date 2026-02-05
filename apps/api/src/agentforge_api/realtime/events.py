@@ -16,26 +16,26 @@ from pydantic import BaseModel, Field
 
 class EventType(str, Enum):
     """Types of real-time events."""
-    
+
     # Execution lifecycle
     EXECUTION_STARTED = "EXECUTION_STARTED"
     EXECUTION_COMPLETED = "EXECUTION_COMPLETED"
     EXECUTION_FAILED = "EXECUTION_FAILED"
     EXECUTION_CANCELLED = "EXECUTION_CANCELLED"
-    
+
     # Node lifecycle
     NODE_QUEUED = "NODE_QUEUED"
     NODE_RUNNING = "NODE_RUNNING"
     NODE_COMPLETED = "NODE_COMPLETED"
     NODE_FAILED = "NODE_FAILED"
     NODE_SKIPPED = "NODE_SKIPPED"
-    
+
     # Cache events
     NODE_CACHE_HIT = "NODE_CACHE_HIT"
-    
+
     # Logging
     LOG_EMITTED = "LOG_EMITTED"
-    
+
     # Resume events (Phase 12)
     RESUME_START = "RESUME_START"
     NODE_OUTPUT_REUSED = "NODE_OUTPUT_REUSED"
@@ -45,15 +45,15 @@ class EventType(str, Enum):
 class ExecutionEvent(BaseModel):
     """
     Base event for all real-time events.
-    
+
     Immutable and JSON-serializable for WebSocket transmission.
     """
-    
+
     event_type: EventType
     execution_id: str
     timestamp: datetime = Field(default_factory=lambda: datetime.now())
     payload: dict[str, Any] = Field(default_factory=dict)
-    
+
     def to_message(self) -> dict:
         """Convert to WebSocket message format."""
         return {

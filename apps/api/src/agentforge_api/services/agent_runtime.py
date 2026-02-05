@@ -9,18 +9,18 @@ Real agent execution will be implemented in later phases.
 
 import asyncio
 import random
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from agentforge_api.models import (
-    NodeJob,
     JobResult,
+    NodeJob,
     NodeType,
 )
 from agentforge_api.realtime import (
     event_emitter,
-    node_running,
-    node_cache_hit,
     log_emitted,
+    node_cache_hit,
+    node_running,
 )
 from agentforge_api.services.cache import (
     CacheKey,
@@ -32,14 +32,14 @@ from agentforge_api.services.cache import (
 class AgentRuntime:
     """
     Runtime for executing agent nodes.
-    
+
     Mock implementation that simulates:
     - Variable execution time
     - Success/failure scenarios
     - Output generation
     - Real-time event emission
     - Tenant-isolated result caching
-    
+
     Cache behavior:
     - Cache checked ONLY on first attempt (retry_count == 0)
     - Cache written ONLY on success
@@ -47,7 +47,7 @@ class AgentRuntime:
     - Cache failures NEVER break execution
     - Cache keys include tenant_id for isolation
     """
-    
+
     def __init__(
         self,
         min_delay_ms: int = 100,
@@ -59,11 +59,11 @@ class AgentRuntime:
         self.max_delay_ms = max_delay_ms
         self.failure_rate = failure_rate
         self.cache_enabled = cache_enabled
-    
+
     async def execute(self, job: NodeJob) -> JobResult:
         """
         Execute a node job.
-        
+
         Flow:
         1. If first attempt and cacheable, check cache (tenant-scoped)
         2. If cache hit, return cached result immediately
@@ -71,36 +71,36 @@ class AgentRuntime:
         4. If success, write to cache (tenant-scoped)
         5. Return result
         """
-        start_time = datetime.now(timezone.utc)
+        start_time = datetime.now(UTC)
         is_first_attempt = job.retry_count == 0
         is_cacheable = self._is_cacheable(job)
         cache_key: CacheKey | None = None
-        
+
         # Cache requires tenant_id
         has_tenant = bool(job.tenant_id)
-        
+
         # === Cache Lookup (first attempt only, requires tenant) ===
         if self.cache_enabled and is_first_attempt and is_cacheable and has_tenant:
             cache_key = self._generate_cache_key(job)
             cached_result = await self._check_cache(job, cache_key)
             if cached_result is not None:
                 return cached_result
-        
+
         # === Execute Node ===
         result = await self._execute_node(job, start_time)
-        
+
         # === Cache Write (success only, requires tenant) ===
         if self.cache_enabled and result.success and is_cacheable and has_tenant:
             if cache_key is None:
                 cache_key = self._generate_cache_key(job)
             await self._write_cache(job, cache_key, result)
-        
+
         return result
-    
+
     def _is_cacheable(self, job: NodeJob) -> bool:
         """
         Determine if a job's output can be cached.
-        
+
         Currently caches agent and tool nodes only.
         Input/output nodes are pass-through and not cached.
         """
@@ -109,23 +109,23 @@ class AgentRuntime:
             return node_type in (NodeType.AGENT, NodeType.TOOL)
         except (ValueError, TypeError):
             return False
-    
+
     def _generate_cache_key(self, job: NodeJob) -> CacheKey:
         """
         Generate tenant-scoped cache key for a job.
-        
+
         Key includes tenant_id to ensure strict isolation.
         """
         agent_id = job.agent_id or job.node_type or "unknown"
         agent_version = job.node_config.get("version", "1.0.0")
-        
+
         return generate_cache_key(
             tenant_id=job.tenant_id,
             agent_id=agent_id,
             inputs=job.inputs,
             agent_version=str(agent_version),
         )
-    
+
     async def _check_cache(
         self,
         job: NodeJob,
@@ -133,17 +133,17 @@ class AgentRuntime:
     ) -> JobResult | None:
         """
         Check cache for existing result.
-        
+
         Returns JobResult if cache hit, None if miss.
         Never raises exceptions.
         """
         try:
             entry = result_cache.get(cache_key)
-            
+
             if entry is None:
                 await self._emit_log(job, "info", "Cache miss - executing node")
                 return None
-            
+
             # Verify tenant matches (defense in depth)
             if entry.metadata.tenant_id != job.tenant_id:
                 await self._emit_log(
@@ -152,20 +152,22 @@ class AgentRuntime:
                     "Cache entry tenant mismatch - ignoring cached result",
                 )
                 return None
-            
+
             # Cache hit
-            await event_emitter.emit(node_cache_hit(
-                execution_id=job.execution_id,
-                node_id=job.node_id,
-                original_duration_ms=entry.metadata.duration_ms,
-            ))
-            
+            await event_emitter.emit(
+                node_cache_hit(
+                    execution_id=job.execution_id,
+                    node_id=job.node_id,
+                    original_duration_ms=entry.metadata.duration_ms,
+                )
+            )
+
             await self._emit_log(
                 job,
                 "info",
                 f"Cache hit - returning cached result (originally took {entry.metadata.duration_ms}ms)",
             )
-            
+
             return JobResult(
                 job_id=job.id,
                 node_id=job.node_id,
@@ -174,7 +176,7 @@ class AgentRuntime:
                 output=entry.output,
                 duration_ms=0,
             )
-            
+
         except Exception as e:
             await self._emit_log(
                 job,
@@ -182,7 +184,7 @@ class AgentRuntime:
                 f"Cache lookup failed, continuing with execution: {e}",
             )
             return None
-    
+
     async def _write_cache(
         self,
         job: NodeJob,
@@ -191,7 +193,7 @@ class AgentRuntime:
     ) -> None:
         """
         Write successful result to cache.
-        
+
         Never raises exceptions.
         """
         try:
@@ -200,15 +202,15 @@ class AgentRuntime:
                 output=result.output,
                 duration_ms=result.duration_ms,
             )
-            
+
             if success:
                 await self._emit_log(job, "info", "Result cached for future executions")
             else:
                 await self._emit_log(job, "warn", "Failed to cache result")
-                
+
         except Exception as e:
             await self._emit_log(job, "warn", f"Cache write failed: {e}")
-    
+
     async def _execute_node(
         self,
         job: NodeJob,
@@ -216,15 +218,17 @@ class AgentRuntime:
     ) -> JobResult:
         """
         Execute the actual node logic.
-        
+
         This is the core execution path, used on cache miss or retry.
         """
-        await event_emitter.emit(node_running(
-            execution_id=job.execution_id,
-            node_id=job.node_id,
-            retry_count=job.retry_count,
-        ))
-        
+        await event_emitter.emit(
+            node_running(
+                execution_id=job.execution_id,
+                node_id=job.node_id,
+                retry_count=job.retry_count,
+            )
+        )
+
         if job.retry_count > 0:
             await self._emit_log(
                 job,
@@ -237,16 +241,16 @@ class AgentRuntime:
                 "info",
                 "Starting execution",
             )
-        
+
         try:
             delay_ms = random.randint(self.min_delay_ms, self.max_delay_ms)
             await asyncio.sleep(delay_ms / 1000)
-            
+
             if random.random() < self.failure_rate:
                 raise RuntimeError("Simulated random failure")
-            
+
             node_type = NodeType(job.node_type) if job.node_type else None
-            
+
             if node_type == NodeType.INPUT:
                 output = await self._execute_input_node(job)
             elif node_type == NodeType.OUTPUT:
@@ -257,16 +261,16 @@ class AgentRuntime:
                 output = await self._execute_tool_node(job)
             else:
                 output = await self._execute_generic_node(job)
-            
-            end_time = datetime.now(timezone.utc)
+
+            end_time = datetime.now(UTC)
             duration_ms = int((end_time - start_time).total_seconds() * 1000)
-            
+
             await self._emit_log(
                 job,
                 "info",
                 f"Execution completed in {duration_ms}ms",
             )
-            
+
             return JobResult(
                 job_id=job.id,
                 node_id=job.node_id,
@@ -275,17 +279,17 @@ class AgentRuntime:
                 output=output,
                 duration_ms=duration_ms,
             )
-            
+
         except Exception as e:
-            end_time = datetime.now(timezone.utc)
+            end_time = datetime.now(UTC)
             duration_ms = int((end_time - start_time).total_seconds() * 1000)
-            
+
             await self._emit_log(
                 job,
                 "error",
                 f"Execution failed: {str(e)}",
             )
-            
+
             return JobResult(
                 job_id=job.id,
                 node_id=job.node_id,
@@ -294,7 +298,7 @@ class AgentRuntime:
                 error=str(e),
                 duration_ms=duration_ms,
             )
-    
+
     async def _emit_log(
         self,
         job: NodeJob,
@@ -302,41 +306,43 @@ class AgentRuntime:
         message: str,
     ) -> None:
         """Emit a log event."""
-        await event_emitter.emit(log_emitted(
-            execution_id=job.execution_id,
-            node_id=job.node_id,
-            level=level,
-            message=message,
-        ))
-    
+        await event_emitter.emit(
+            log_emitted(
+                execution_id=job.execution_id,
+                node_id=job.node_id,
+                level=level,
+                message=message,
+            )
+        )
+
     async def _execute_input_node(self, job: NodeJob) -> dict:
         """Execute an input node."""
         await self._emit_log(job, "info", "Processing input data")
-        
+
         return {
             "type": "input",
             "node_id": job.node_id,
             "data": job.inputs,
         }
-    
+
     async def _execute_output_node(self, job: NodeJob) -> dict:
         """Execute an output node."""
         await self._emit_log(job, "info", "Collecting output data")
-        
+
         return {
             "type": "output",
             "node_id": job.node_id,
             "data": job.inputs,
         }
-    
+
     async def _execute_agent_node(self, job: NodeJob) -> dict:
         """Execute an agent node (mock)."""
         agent_id = job.agent_id or "unknown"
-        
+
         await self._emit_log(job, "info", f"Invoking agent: {agent_id}")
         await asyncio.sleep(0.05)
         await self._emit_log(job, "info", "Agent response received")
-        
+
         return {
             "type": "agent",
             "node_id": job.node_id,
@@ -349,13 +355,13 @@ class AgentRuntime:
                 "tokens_used": random.randint(50, 200),
             },
         }
-    
+
     async def _execute_tool_node(self, job: NodeJob) -> dict:
         """Execute a tool node (mock)."""
         tool_id = job.node_config.get("tool_id", "unknown")
-        
+
         await self._emit_log(job, "info", f"Executing tool: {tool_id}")
-        
+
         return {
             "type": "tool",
             "node_id": job.node_id,
@@ -363,11 +369,11 @@ class AgentRuntime:
             "result": f"Mock tool output from {tool_id}",
             "inputs_received": job.inputs,
         }
-    
+
     async def _execute_generic_node(self, job: NodeJob) -> dict:
         """Execute a generic/unknown node type."""
         await self._emit_log(job, "warn", f"Unknown node type: {job.node_type}")
-        
+
         return {
             "type": "generic",
             "node_id": job.node_id,

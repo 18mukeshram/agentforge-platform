@@ -10,6 +10,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useExecution, useExecutionLogs } from "@/hooks";
 import { resumeExecution } from "@/lib/api/executions";
+import { usePermissions } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -308,6 +309,10 @@ function ReplayControlsBar({
   // Use selected failed node or first failed node
   const resumeNodeId = selectedNodeId || failedNodeId;
 
+  // Permission check for resume action (Phase 13.3)
+  const { can } = usePermissions();
+  const resumePermission = can("workflow:resume");
+
   return (
     <TooltipProvider>
       <div className="flex items-center gap-4 rounded-lg border bg-card p-4">
@@ -383,17 +388,19 @@ function ReplayControlsBar({
           <span className="text-sm text-red-500">{resumeError}</span>
         )}
 
-        {/* Resume Button (enabled!) */}
+
+        {/* Resume Button with permission check (Phase 13.3) */}
         {hasFailed && !isReplaying && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button 
                 size="sm" 
                 variant="outline"
-                disabled={!resumeNodeId || isResuming}
-                onClick={() => resumeNodeId && onResume?.(resumeNodeId)}
+                disabled={!resumeNodeId || isResuming || !resumePermission.allowed}
+                onClick={() => resumeNodeId && resumePermission.allowed && onResume?.(resumeNodeId)}
                 className={cn(
-                  isResuming && "animate-pulse"
+                  isResuming && "animate-pulse",
+                  !resumePermission.allowed && "opacity-50 cursor-not-allowed"
                 )}
               >
                 <RefreshIcon className={cn("mr-2 h-4 w-4", isResuming && "animate-spin")} />
@@ -401,9 +408,11 @@ function ReplayControlsBar({
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              {selectedNodeId 
-                ? `Resume execution from selected node: ${selectedNodeId}`
-                : `Resume execution from failed node: ${failedNodeId}`
+              {!resumePermission.allowed 
+                ? resumePermission.reason
+                : selectedNodeId 
+                  ? `Resume execution from selected node: ${selectedNodeId}`
+                  : `Resume execution from failed node: ${failedNodeId}`
               }
             </TooltipContent>
           </Tooltip>

@@ -13,3 +13,6 @@ export type { CanvasStore, CanvasMode, ClipboardData } from "./canvas-store";
 
 export { useExecutionStore } from "./execution-store";
 export type { ExecutionStore, ExecutionLog } from "./execution-store";
+
+export { useSessionStore } from "./session-store";
+export type { SessionStore } from "./session-store";

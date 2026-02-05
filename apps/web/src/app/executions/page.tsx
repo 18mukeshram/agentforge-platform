@@ -2,29 +2,75 @@
 
 /**
  * Execution History List page.
- * Shows all executions with pagination and status filtering.
+ * Shows all executions with pagination, filtering, and search.
  */
 
-import { useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useCallback, useEffect, useMemo } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAllExecutions } from "@/hooks";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 10;
+const STATUS_OPTIONS = ["all", "pending", "running", "completed", "failed", "cancelled"] as const;
 
 export default function ExecutionsPage() {
   const router = useRouter();
-  const [page, setPage] = useState(0);
+  const searchParams = useSearchParams();
 
-  const { data, isLoading, error } = useAllExecutions({
+  // Read filters from URL
+  const initialStatus = searchParams.get("status") || "all";
+  const initialSearch = searchParams.get("search") || "";
+  const initialPage = parseInt(searchParams.get("page") || "0", 10);
+
+  const [status, setStatus] = useState(initialStatus);
+  const [search, setSearch] = useState(initialSearch);
+  const [page, setPage] = useState(initialPage);
+
+  // Build API params
+  const apiParams = useMemo(() => ({
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
-  });
+    status: status !== "all" ? status : undefined,
+    workflowId: undefined, // Could be added for workflow filter
+  }), [page, status]);
 
-  const executions = data?.items || [];
+  const { data, isLoading, error } = useAllExecutions(apiParams);
+
+  // Filter client-side by search (execution ID or workflow ID)
+  const filteredExecutions = useMemo(() => {
+    const items = data?.items || [];
+    if (!search.trim()) return items;
+    const query = search.toLowerCase();
+    return items.filter((e) =>
+      e.id.toLowerCase().includes(query) ||
+      e.workflowId.toLowerCase().includes(query)
+    );
+  }, [data?.items, search]);
+
   const hasNext = data?.nextCursor !== null;
   const hasPrev = page > 0;
+
+  // Sync filters to URL
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (status !== "all") params.set("status", status);
+    if (search) params.set("search", search);
+    if (page > 0) params.set("page", page.toString());
+    
+    const queryString = params.toString();
+    const newUrl = queryString ? `/executions?${queryString}` : "/executions";
+    router.replace(newUrl, { scroll: false });
+  }, [status, search, page, router]);
+
+  const handleStatusChange = useCallback((newStatus: string) => {
+    setStatus(newStatus);
+    setPage(0); // Reset page on filter change
+  }, []);
+
+  const handleSearchChange = useCallback((value: string) => {
+    setSearch(value);
+  }, []);
 
   const handleNext = useCallback(() => {
     if (hasNext) setPage((p) => p + 1);
@@ -37,6 +83,12 @@ export default function ExecutionsPage() {
   const handleRowClick = useCallback((id: string) => {
     router.push(`/executions/${id}`);
   }, [router]);
+
+  const handleClearFilters = useCallback(() => {
+    setStatus("all");
+    setSearch("");
+    setPage(0);
+  }, []);
 
   if (isLoading) {
     return (
@@ -57,6 +109,8 @@ export default function ExecutionsPage() {
     );
   }
 
+  const hasActiveFilters = status !== "all" || search.trim() !== "";
+
   return (
     <div className="flex flex-col gap-6 p-8">
       {/* Header */}
@@ -68,6 +122,64 @@ export default function ExecutionsPage() {
           </p>
         </div>
       </div>
+
+      {/* Filters Bar */}
+      <div className="flex flex-wrap items-center gap-4 rounded-lg border bg-card p-4">
+        {/* Search Input */}
+        <div className="flex-1 min-w-[200px]">
+          <div className="relative">
+            <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search by execution ID or workflow..."
+              value={search}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="w-full rounded-md border bg-background px-10 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <XIcon className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Status Filter */}
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-muted-foreground">Status:</label>
+          <select
+            value={status}
+            onChange={(e) => handleStatusChange(e.target.value)}
+            className="rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            {STATUS_OPTIONS.map((opt) => (
+              <option key={opt} value={opt}>
+                {opt === "all" ? "All" : opt.charAt(0).toUpperCase() + opt.slice(1)}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Clear Filters */}
+        {hasActiveFilters && (
+          <Button variant="ghost" size="sm" onClick={handleClearFilters}>
+            <XIcon className="h-4 w-4 mr-1" />
+            Clear
+          </Button>
+        )}
+      </div>
+
+      {/* Results Info */}
+      {hasActiveFilters && (
+        <div className="text-sm text-muted-foreground">
+          Showing {filteredExecutions.length} execution{filteredExecutions.length !== 1 ? "s" : ""}
+          {status !== "all" && ` with status "${status}"`}
+          {search && ` matching "${search}"`}
+        </div>
+      )}
 
       {/* Executions Table */}
       <div className="rounded-lg border bg-card">
@@ -92,14 +204,14 @@ export default function ExecutionsPage() {
             </tr>
           </thead>
           <tbody>
-            {executions.length === 0 ? (
+            {filteredExecutions.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
-                  No executions found
+                  {hasActiveFilters ? "No matching executions found" : "No executions found"}
                 </td>
               </tr>
             ) : (
-              executions.map((execution) => (
+              filteredExecutions.map((execution) => (
                 <tr
                   key={execution.id}
                   className="border-b cursor-pointer hover:bg-muted/30 transition-colors"
@@ -216,6 +328,22 @@ function ChevronRightIcon({ className }: { className?: string }) {
   return (
     <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+    </svg>
+  );
+}
+
+function SearchIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+    </svg>
+  );
+}
+
+function XIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
     </svg>
   );
 }

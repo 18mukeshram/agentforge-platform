@@ -3,20 +3,29 @@
 /**
  * Execution details page.
  * Shows execution summary, event timeline, and per-node status.
- * Includes failure diagnostics with error panels and node highlighting.
+ * Includes failure diagnostics and execution replay functionality.
  */
 
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useExecution, useExecutionLogs } from "@/hooks";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { Execution, NodeExecutionState, ExecutionStatus, NodeExecutionStatus } from "@/types";
 
 interface ExecutionDetailsPageProps {
   params: { id: string };
 }
+
+// Speed options for replay
+const REPLAY_SPEEDS = [
+  { label: "0.5x", value: 2000 },
+  { label: "1x", value: 1000 },
+  { label: "2x", value: 500 },
+  { label: "4x", value: 250 },
+];
 
 export default function ExecutionDetailsPage({ params }: ExecutionDetailsPageProps) {
   const router = useRouter();
@@ -25,6 +34,95 @@ export default function ExecutionDetailsPage({ params }: ExecutionDetailsPagePro
   
   // Selected node for highlighting
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  
+  // Replay state
+  const [isReplaying, setIsReplaying] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [replayIndex, setReplayIndex] = useState(-1);
+  const [replaySpeedIndex, setReplaySpeedIndex] = useState(1); // Default 1x
+  const [replayNodeStates, setReplayNodeStates] = useState<Map<string, NodeExecutionStatus>>(new Map());
+  
+  const replayTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const logs = logsData?.items || [];
+
+  // Clear replay timer on unmount
+  useEffect(() => {
+    return () => {
+      if (replayTimerRef.current) {
+        clearTimeout(replayTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Replay animation effect
+  useEffect(() => {
+    if (!isReplaying || isPaused || replayIndex >= logs.length - 1) {
+      return;
+    }
+
+    const speed = REPLAY_SPEEDS[replaySpeedIndex].value;
+    
+    replayTimerRef.current = setTimeout(() => {
+      setReplayIndex((prev) => {
+        const nextIndex = prev + 1;
+        if (nextIndex < logs.length) {
+          // Update node state based on log entry
+          const log = logs[nextIndex];
+          if (log) {
+            setReplayNodeStates((prev) => {
+              const next = new Map(prev);
+              // Infer status from log level/message
+              if (log.level === "error") {
+                next.set(log.nodeId, "failed");
+              } else if (log.message?.toLowerCase().includes("completed")) {
+                next.set(log.nodeId, "completed");
+              } else if (log.message?.toLowerCase().includes("started") || log.message?.toLowerCase().includes("running")) {
+                next.set(log.nodeId, "running");
+              }
+              return next;
+            });
+            setSelectedNodeId(log.nodeId);
+          }
+        }
+        if (nextIndex >= logs.length - 1) {
+          setIsReplaying(false);
+        }
+        return nextIndex;
+      });
+    }, speed);
+
+    return () => {
+      if (replayTimerRef.current) {
+        clearTimeout(replayTimerRef.current);
+      }
+    };
+  }, [isReplaying, isPaused, replayIndex, replaySpeedIndex, logs]);
+
+  const handleStartReplay = useCallback(() => {
+    setReplayIndex(-1);
+    setReplayNodeStates(new Map());
+    setSelectedNodeId(null);
+    setIsPaused(false);
+    setIsReplaying(true);
+    // Trigger first step
+    setTimeout(() => setReplayIndex(0), 100);
+  }, []);
+
+  const handleStopReplay = useCallback(() => {
+    setIsReplaying(false);
+    setIsPaused(false);
+    setReplayIndex(-1);
+    setReplayNodeStates(new Map());
+  }, []);
+
+  const handleTogglePause = useCallback(() => {
+    setIsPaused((prev) => !prev);
+  }, []);
+
+  const handleSpeedChange = useCallback(() => {
+    setReplaySpeedIndex((prev) => (prev + 1) % REPLAY_SPEEDS.length);
+  }, []);
 
   if (isLoading) {
     return (
@@ -51,6 +149,14 @@ export default function ExecutionDetailsPage({ params }: ExecutionDetailsPagePro
     ? execution.nodeStates.find((n) => n.nodeId === selectedNodeId) 
     : null;
 
+  // Compute display node states (use replay states if replaying)
+  const displayNodeStates = isReplaying
+    ? execution.nodeStates.map((node) => ({
+        ...node,
+        status: replayNodeStates.get(node.nodeId) || "pending" as NodeExecutionStatus,
+      }))
+    : execution.nodeStates;
+
   return (
     <div className="flex flex-col gap-6 p-8">
       {/* Header */}
@@ -68,14 +174,31 @@ export default function ExecutionDetailsPage({ params }: ExecutionDetailsPagePro
             </p>
           </div>
         </div>
-        <ExecutionStatusBadge status={execution.status} />
+        <div className="flex items-center gap-2">
+          <ExecutionStatusBadge status={execution.status} />
+        </div>
       </div>
 
       {/* Summary Cards */}
       <ExecutionSummaryCards execution={execution} />
 
+      {/* Replay Controls */}
+      <ReplayControlsBar
+        isReplaying={isReplaying}
+        isPaused={isPaused}
+        replayIndex={replayIndex}
+        totalEvents={logs.length}
+        speedLabel={REPLAY_SPEEDS[replaySpeedIndex].label}
+        onStart={handleStartReplay}
+        onStop={handleStopReplay}
+        onTogglePause={handleTogglePause}
+        onSpeedChange={handleSpeedChange}
+        hasFailed={execution.status === "failed"}
+        failedNodeId={failedNodes[0]?.nodeId}
+      />
+
       {/* Error Alert for Failed Executions */}
-      {execution.status === "failed" && failedNodes.length > 0 && (
+      {execution.status === "failed" && failedNodes.length > 0 && !isReplaying && (
         <FailureAlertBanner 
           failedNodes={failedNodes} 
           onNodeClick={setSelectedNodeId}
@@ -87,24 +210,26 @@ export default function ExecutionDetailsPage({ params }: ExecutionDetailsPagePro
         {/* Node Status */}
         <div className="lg:col-span-1">
           <NodeStatusList 
-            nodes={execution.nodeStates} 
+            nodes={displayNodeStates} 
             selectedNodeId={selectedNodeId}
             onNodeSelect={setSelectedNodeId}
+            isReplaying={isReplaying}
           />
         </div>
 
         {/* Event Timeline or Error Details */}
         <div className="lg:col-span-2">
-          {selectedNode && selectedNode.status === "failed" ? (
+          {selectedNode && selectedNode.status === "failed" && !isReplaying ? (
             <ErrorDetailsPanel 
               node={selectedNode} 
               onClose={() => setSelectedNodeId(null)}
             />
           ) : (
             <ExecutionEventTimeline 
-              logs={logsData?.items || []} 
+              logs={logs} 
               selectedNodeId={selectedNodeId}
               onNodeClick={setSelectedNodeId}
+              highlightIndex={isReplaying ? replayIndex : undefined}
             />
           )}
         </div>
@@ -115,6 +240,123 @@ export default function ExecutionDetailsPage({ params }: ExecutionDetailsPagePro
         <ExecutionOutputs outputs={execution.outputs} />
       )}
     </div>
+  );
+}
+
+// Replay Controls Bar
+function ReplayControlsBar({
+  isReplaying,
+  isPaused,
+  replayIndex,
+  totalEvents,
+  speedLabel,
+  onStart,
+  onStop,
+  onTogglePause,
+  onSpeedChange,
+  hasFailed,
+  failedNodeId,
+}: {
+  isReplaying: boolean;
+  isPaused: boolean;
+  replayIndex: number;
+  totalEvents: number;
+  speedLabel: string;
+  onStart: () => void;
+  onStop: () => void;
+  onTogglePause: () => void;
+  onSpeedChange: () => void;
+  hasFailed: boolean;
+  failedNodeId?: string;
+}) {
+  const progress = totalEvents > 0 ? Math.max(0, (replayIndex + 1) / totalEvents) * 100 : 0;
+
+  return (
+    <TooltipProvider>
+      <div className="flex items-center gap-4 rounded-lg border bg-card p-4">
+        {/* Replay Controls */}
+        <div className="flex items-center gap-2">
+          {!isReplaying ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button size="sm" onClick={onStart} disabled={totalEvents === 0}>
+                  <ReplayIcon className="mr-2 h-4 w-4" />
+                  Replay Execution
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Replay execution events step by step</TooltipContent>
+            </Tooltip>
+          ) : (
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button size="icon" variant="outline" onClick={onTogglePause}>
+                    {isPaused ? (
+                      <PlayIcon className="h-4 w-4" />
+                    ) : (
+                      <PauseIcon className="h-4 w-4" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{isPaused ? "Resume" : "Pause"}</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button size="icon" variant="outline" onClick={onStop}>
+                    <StopIcon className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Stop replay</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button size="sm" variant="ghost" onClick={onSpeedChange}>
+                    <SpeedIcon className="mr-1 h-4 w-4" />
+                    {speedLabel}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Change playback speed</TooltipContent>
+              </Tooltip>
+            </>
+          )}
+        </div>
+
+        {/* Progress Bar */}
+        {isReplaying && (
+          <div className="flex flex-1 items-center gap-3">
+            <div className="h-2 flex-1 rounded-full bg-muted">
+              <div
+                className="h-2 rounded-full bg-primary transition-all duration-200"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <span className="text-sm text-muted-foreground">
+              {replayIndex + 1} / {totalEvents}
+            </span>
+          </div>
+        )}
+
+        {/* Spacer */}
+        {!isReplaying && <div className="flex-1" />}
+
+        {/* Resume Button (disabled, tooltip only) */}
+        {hasFailed && !isReplaying && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button size="sm" variant="outline" disabled className="opacity-50">
+                <RefreshIcon className="mr-2 h-4 w-4" />
+                Resume from {failedNodeId?.slice(0, 8)}...
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              Resume execution from failed node (coming soon)
+            </TooltipContent>
+          </Tooltip>
+        )}
+      </div>
+    </TooltipProvider>
   );
 }
 
@@ -161,7 +403,6 @@ function ErrorDetailsPanel({
   node: NodeExecutionState;
   onClose: () => void;
 }) {
-  // Parse error for more details (may contain JSON or stack trace)
   const errorInfo = parseError(node.error);
 
   return (
@@ -177,7 +418,6 @@ function ErrorDetailsPanel({
       </div>
       
       <div className="space-y-4 p-4">
-        {/* Node Info */}
         <div className="rounded-lg bg-muted/50 p-3">
           <div className="grid gap-2 text-sm">
             <div className="flex justify-between">
@@ -209,7 +449,6 @@ function ErrorDetailsPanel({
           </div>
         </div>
 
-        {/* Error Message */}
         <div>
           <h4 className="mb-2 text-sm font-semibold text-red-800">Error Message</h4>
           <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
@@ -217,7 +456,6 @@ function ErrorDetailsPanel({
           </div>
         </div>
 
-        {/* Error Type */}
         {errorInfo.type && (
           <div>
             <h4 className="mb-2 text-sm font-semibold text-muted-foreground">Error Type</h4>
@@ -225,7 +463,6 @@ function ErrorDetailsPanel({
           </div>
         )}
 
-        {/* Stack Trace */}
         {errorInfo.stack && (
           <div>
             <h4 className="mb-2 text-sm font-semibold text-muted-foreground">Stack Trace</h4>
@@ -237,7 +474,6 @@ function ErrorDetailsPanel({
           </div>
         )}
 
-        {/* Raw Error (if structured) */}
         {errorInfo.raw && (
           <div>
             <h4 className="mb-2 text-sm font-semibold text-muted-foreground">Raw Error Data</h4>
@@ -253,7 +489,6 @@ function ErrorDetailsPanel({
   );
 }
 
-// Parse error string for structured information
 function parseError(error: string | null): {
   message: string | null;
   type: string | null;
@@ -264,7 +499,6 @@ function parseError(error: string | null): {
     return { message: null, type: null, stack: null, raw: null };
   }
 
-  // Try to parse as JSON
   try {
     const parsed = JSON.parse(error);
     return {
@@ -274,7 +508,6 @@ function parseError(error: string | null): {
       raw: parsed,
     };
   } catch {
-    // Check for stack trace pattern
     const stackMatch = error.match(/^(.+?)\n((?:\s+at .+\n?)+)/m);
     if (stackMatch) {
       return {
@@ -355,15 +588,20 @@ function NodeStatusList({
   nodes,
   selectedNodeId,
   onNodeSelect,
+  isReplaying,
 }: { 
   nodes: NodeExecutionState[];
   selectedNodeId: string | null;
   onNodeSelect: (nodeId: string) => void;
+  isReplaying?: boolean;
 }) {
   return (
     <div className="rounded-lg border bg-card">
-      <div className="border-b px-4 py-3">
+      <div className="flex items-center justify-between border-b px-4 py-3">
         <h3 className="font-semibold">Node Status</h3>
+        {isReplaying && (
+          <span className="text-xs text-primary animate-pulse">● Replaying</span>
+        )}
       </div>
       <ScrollArea className="h-80">
         <div className="space-y-2 p-4">
@@ -374,9 +612,10 @@ function NodeStatusList({
               <button
                 key={node.nodeId}
                 className={cn(
-                  "flex w-full items-center justify-between rounded-lg border p-3 text-left transition-colors",
+                  "flex w-full items-center justify-between rounded-lg border p-3 text-left transition-all",
                   "hover:bg-muted/50",
                   node.status === "failed" && "border-red-200 bg-red-50 hover:bg-red-100",
+                  node.status === "running" && "border-blue-200 bg-blue-50 animate-pulse",
                   selectedNodeId === node.nodeId && "ring-2 ring-primary"
                 )}
                 onClick={() => onNodeSelect(node.nodeId)}
@@ -407,15 +646,29 @@ function ExecutionEventTimeline({
   logs,
   selectedNodeId,
   onNodeClick,
+  highlightIndex,
 }: {
   logs: { timestamp: string; nodeId: string; level: string; message: string }[];
   selectedNodeId: string | null;
   onNodeClick: (nodeId: string) => void;
+  highlightIndex?: number;
 }) {
+  const highlightRef = useRef<HTMLButtonElement>(null);
+
+  // Auto-scroll to highlighted item during replay
+  useEffect(() => {
+    if (highlightIndex !== undefined && highlightRef.current) {
+      highlightRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [highlightIndex]);
+
   return (
     <div className="rounded-lg border bg-card">
-      <div className="border-b px-4 py-3">
+      <div className="flex items-center justify-between border-b px-4 py-3">
         <h3 className="font-semibold">Event Timeline</h3>
+        {highlightIndex !== undefined && (
+          <span className="text-xs text-primary animate-pulse">● Live</span>
+        )}
       </div>
       <ScrollArea className="h-80">
         <div className="space-y-1 p-4">
@@ -425,12 +678,14 @@ function ExecutionEventTimeline({
             logs.map((log, index) => (
               <button
                 key={index}
+                ref={index === highlightIndex ? highlightRef : undefined}
                 className={cn(
-                  "w-full rounded px-3 py-2 text-left font-mono text-xs transition-colors",
+                  "w-full rounded px-3 py-2 text-left font-mono text-xs transition-all",
                   log.level === "error" && "bg-destructive/10 text-destructive hover:bg-destructive/20",
                   log.level === "warn" && "bg-yellow-500/10 text-yellow-600 hover:bg-yellow-500/20",
                   log.level === "info" && "bg-muted hover:bg-muted/80",
-                  selectedNodeId === log.nodeId && "ring-2 ring-primary"
+                  selectedNodeId === log.nodeId && "ring-2 ring-primary",
+                  index === highlightIndex && "ring-2 ring-blue-500 bg-blue-100 animate-pulse"
                 )}
                 onClick={() => onNodeClick(log.nodeId)}
               >
@@ -539,20 +794,15 @@ function NodeStatusIcon({ status }: { status: NodeExecutionStatus }) {
 // Utility Functions
 function calculateDuration(startTime: string, endTime: string | null): string | null {
   if (!endTime) return null;
-
   const start = new Date(startTime).getTime();
   const end = new Date(endTime).getTime();
   const durationMs = end - start;
 
-  if (durationMs < 1000) {
-    return `${durationMs}ms`;
-  } else if (durationMs < 60000) {
-    return `${(durationMs / 1000).toFixed(1)}s`;
-  } else {
-    const minutes = Math.floor(durationMs / 60000);
-    const seconds = Math.floor((durationMs % 60000) / 1000);
-    return `${minutes}m ${seconds}s`;
-  }
+  if (durationMs < 1000) return `${durationMs}ms`;
+  if (durationMs < 60000) return `${(durationMs / 1000).toFixed(1)}s`;
+  const minutes = Math.floor(durationMs / 60000);
+  const seconds = Math.floor((durationMs % 60000) / 1000);
+  return `${minutes}m ${seconds}s`;
 }
 
 function formatTimestamp(timestamp: string): string {
@@ -659,6 +909,62 @@ function AlertTriangleIcon({ className }: { className?: string }) {
       <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" />
       <path d="M12 9v4" />
       <path d="M12 17h.01" />
+    </svg>
+  );
+}
+
+function ReplayIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+      <polygon points="10 8 16 12 10 16 10 8" />
+    </svg>
+  );
+}
+
+function PlayIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <polygon points="6 3 20 12 6 21 6 3" />
+    </svg>
+  );
+}
+
+function PauseIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <rect x="14" y="4" width="4" height="16" rx="1" />
+      <rect x="6" y="4" width="4" height="16" rx="1" />
+    </svg>
+  );
+}
+
+function StopIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <rect x="6" y="6" width="12" height="12" rx="2" />
+    </svg>
+  );
+}
+
+function SpeedIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M19 17H5" />
+      <path d="M19 12H5" />
+      <path d="M19 7H5" />
+    </svg>
+  );
+}
+
+function RefreshIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+      <path d="M21 3v5h-5" />
+      <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+      <path d="M8 16H3v5" />
     </svg>
   );
 }

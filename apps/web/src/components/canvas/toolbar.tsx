@@ -22,9 +22,10 @@ interface ToolbarProps {
   onSave?: () => void;
   onValidate?: () => void;
   onRun?: () => void;
+  isReadOnly?: boolean;  // Phase 13.4: Read-only mode
 }
 
-export function Toolbar({ className, onSave, onValidate, onRun }: ToolbarProps) {
+export function Toolbar({ className, onSave, onValidate, onRun, isReadOnly = false }: ToolbarProps) {
   const reactFlow = useReactFlow();
 
   // Canvas store actions
@@ -41,9 +42,9 @@ export function Toolbar({ className, onSave, onValidate, onRun }: ToolbarProps) 
   const { nodePaletteOpen, toggleNodePalette, executionHistoryOpen, toggleExecutionHistory } = useUiStore();
 
   const hasSelection = selectedNodeIds.length > 0 || selectedEdgeIds.length > 0;
-  const canSave = !!workflow && isDirty && !isSaving;
+  const canSave = !!workflow && isDirty && !isSaving && !isReadOnly;
   const canValidate = !!workflow && !isValidating;
-  const canRun = !!workflow && workflow.status === "valid" && !isExecuting;
+  const canRun = !!workflow && workflow.status === "valid" && !isExecuting && !isReadOnly;
 
   // Zoom handlers
   const handleZoomIn = () => {

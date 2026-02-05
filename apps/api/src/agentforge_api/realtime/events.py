@@ -35,6 +35,11 @@ class EventType(str, Enum):
     
     # Logging
     LOG_EMITTED = "LOG_EMITTED"
+    
+    # Resume events (Phase 12)
+    RESUME_START = "RESUME_START"
+    NODE_OUTPUT_REUSED = "NODE_OUTPUT_REUSED"
+    RESUME_COMPLETE = "RESUME_COMPLETE"
 
 
 class ExecutionEvent(BaseModel):
@@ -234,5 +239,60 @@ def log_emitted(
             "nodeId": node_id,
             "level": level,
             "message": message,
+        },
+    )
+
+
+# === Resume Event Factories (Phase 12) ===
+
+
+def resume_start(
+    execution_id: str,
+    parent_execution_id: str,
+    resumed_from_node_id: str,
+    skipped_count: int,
+    rerun_count: int,
+) -> ExecutionEvent:
+    """Create RESUME_START event for resumed executions."""
+    return ExecutionEvent(
+        event_type=EventType.RESUME_START,
+        execution_id=execution_id,
+        payload={
+            "parentExecutionId": parent_execution_id,
+            "resumedFromNodeId": resumed_from_node_id,
+            "skippedCount": skipped_count,
+            "rerunCount": rerun_count,
+        },
+    )
+
+
+def node_output_reused(
+    execution_id: str,
+    node_id: str,
+    source_execution_id: str,
+) -> ExecutionEvent:
+    """Create NODE_OUTPUT_REUSED event for cached node outputs."""
+    return ExecutionEvent(
+        event_type=EventType.NODE_OUTPUT_REUSED,
+        execution_id=execution_id,
+        payload={
+            "nodeId": node_id,
+            "sourceExecutionId": source_execution_id,
+        },
+    )
+
+
+def resume_complete(
+    execution_id: str,
+    status: str,
+    duration_ms: int,
+) -> ExecutionEvent:
+    """Create RESUME_COMPLETE event when resumed execution finishes."""
+    return ExecutionEvent(
+        event_type=EventType.RESUME_COMPLETE,
+        execution_id=execution_id,
+        payload={
+            "status": status,
+            "durationMs": duration_ms,
         },
     )

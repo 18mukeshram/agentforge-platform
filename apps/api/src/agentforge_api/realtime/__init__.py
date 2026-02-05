@@ -16,6 +16,10 @@ from agentforge_api.realtime.events import (
     node_failed,
     node_skipped,
     log_emitted,
+    # Resume events (Phase 12)
+    resume_start,
+    node_output_reused,
+    resume_complete,
 )
 from agentforge_api.realtime.emitter import (
     EventEmitter,
@@ -47,6 +51,10 @@ __all__ = [
     "node_failed",
     "node_skipped",
     "log_emitted",
+    # Resume event factories (Phase 12)
+    "resume_start",
+    "node_output_reused",
+    "resume_complete",
     # Emitter
     "EventEmitter",
     "EventHandler",

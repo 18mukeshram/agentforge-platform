@@ -49,6 +49,10 @@ from agentforge_api.realtime import (
     node_failed,
     node_skipped,
     connection_hub,
+    # Resume events (Phase 12)
+    resume_start,
+    node_output_reused,
+    resume_complete,
 )
 
 
@@ -229,6 +233,7 @@ class ExecutionOrchestrator:
         
         Skipped nodes (already completed in parent) remain COMPLETED.
         Only dispatches jobs for nodes that need to re-run.
+        Emits resume-specific WebSocket events.
         """
         # Generate execution plan (same DAG structure)
         plan = self.generate_plan(workflow, execution.id)
@@ -244,7 +249,7 @@ class ExecutionOrchestrator:
         # Update execution status to RUNNING
         execution_service.update_status(execution.id, ExecutionStatus.RUNNING)
         
-        # Emit EXECUTION_STARTED event
+        # Emit EXECUTION_STARTED event (for compatibility)
         await event_emitter.emit(execution_started(
             execution_id=execution.id,
             workflow_id=workflow.id,
@@ -253,6 +258,27 @@ class ExecutionOrchestrator:
         
         # Get current node states (skipped nodes are already COMPLETED)
         state_map = execution.get_node_state_map()
+        
+        # Count skipped and rerun nodes
+        skipped_nodes = [n for n, s in state_map.items() if s.status == NodeExecutionStatus.COMPLETED]
+        rerun_nodes = [n for n, s in state_map.items() if s.status == NodeExecutionStatus.PENDING]
+        
+        # Emit RESUME_START event (Phase 12.3)
+        await event_emitter.emit(resume_start(
+            execution_id=execution.id,
+            parent_execution_id=execution.parent_execution_id or "",
+            resumed_from_node_id=execution.resumed_from_node_id or "",
+            skipped_count=len(skipped_nodes),
+            rerun_count=len(rerun_nodes),
+        ))
+        
+        # Emit NODE_OUTPUT_REUSED events for skipped nodes (Phase 12.3)
+        for node_id in skipped_nodes:
+            await event_emitter.emit(node_output_reused(
+                execution_id=execution.id,
+                node_id=node_id,
+                source_execution_id=execution.parent_execution_id or "",
+            ))
         
         # Find resume entry nodes: nodes that are PENDING and have all dependencies COMPLETED
         resume_entry_nodes = self._find_resume_entry_nodes(plan, state_map)
@@ -496,12 +522,22 @@ class ExecutionOrchestrator:
         if current and current.status != aggregate_status:
             execution_service.update_status(execution_id, aggregate_status)
             
+            duration_ms = self._compute_duration(execution_id)
+            
             if aggregate_status == ExecutionStatus.COMPLETED:
-                duration_ms = self._compute_duration(execution_id)
                 await event_emitter.emit(execution_completed(
                     execution_id=execution_id,
                     duration_ms=duration_ms,
                 ))
+                
+                # Emit RESUME_COMPLETE for resumed executions (Phase 12.3)
+                if current.parent_execution_id is not None:
+                    await event_emitter.emit(resume_complete(
+                        execution_id=execution_id,
+                        status="completed",
+                        duration_ms=duration_ms,
+                    ))
+                
                 self._cleanup_execution(execution_id)
                 
             elif aggregate_status == ExecutionStatus.FAILED:
@@ -509,6 +545,15 @@ class ExecutionOrchestrator:
                     execution_id=execution_id,
                     error="One or more nodes failed",
                 ))
+                
+                # Emit RESUME_COMPLETE for resumed executions (Phase 12.3)
+                if current.parent_execution_id is not None:
+                    await event_emitter.emit(resume_complete(
+                        execution_id=execution_id,
+                        status="failed",
+                        duration_ms=duration_ms,
+                    ))
+                
                 self._cleanup_execution(execution_id)
     
     async def cancel_execution(self, execution_id: str) -> None:

@@ -11,25 +11,23 @@ Runs all validations in correct order:
 from dataclasses import dataclass
 
 from agentforge_api.models import (
-    Workflow,
-    ValidationResult,
     ValidationError,
-    AgentDefinition,
-)
-from agentforge_api.validation.structural import (
-    validate_edge_references,
-    validate_no_duplicate_edges,
-    validate_has_entry_node,
-    validate_no_cycles,
-    validate_no_orphans,
+    ValidationResult,
+    Workflow,
 )
 from agentforge_api.validation.semantic import (
     AgentRegistry,
-    validate_type_compatibility,
     validate_required_inputs,
+    validate_type_compatibility,
+)
+from agentforge_api.validation.structural import (
+    validate_edge_references,
+    validate_has_entry_node,
+    validate_no_cycles,
+    validate_no_duplicate_edges,
+    validate_no_orphans,
 )
 from agentforge_api.validation.topological import (
-    topological_sort,
     get_execution_order,
 )
 
@@ -37,10 +35,10 @@ from agentforge_api.validation.topological import (
 @dataclass(frozen=True)
 class ValidateWorkflowOptions:
     """Options for workflow validation."""
-    
+
     agent_registry: AgentRegistry | None = None
     """Agent registry for semantic validation. If None, semantic validation is skipped."""
-    
+
     fail_fast: bool = False
     """If True, stop at first error category. If False, collect all errors."""
 
@@ -51,18 +49,18 @@ def validate_workflow(
 ) -> ValidationResult:
     """
     Validate a workflow against all invariants.
-    
+
     Runs validations in order:
     1. Structural (S1-S5) - must pass before semantic
     2. Semantic (M1-M2) - requires agent registry
-    
+
     Returns combined result with all errors.
     """
     if options is None:
         options = ValidateWorkflowOptions()
-    
+
     all_errors: list[ValidationError] = []
-    
+
     def collect_errors(result: ValidationResult) -> bool:
         """
         Collect errors from result.
@@ -73,48 +71,48 @@ def validate_workflow(
             if options.fail_fast:
                 return True
         return False
-    
+
     # === Structural Validation (order matters) ===
-    
+
     # S2: Edge references must be valid first
     if collect_errors(validate_edge_references(workflow)):
         return ValidationResult.failure(all_errors)
-    
+
     # S3: No duplicate edges
     if collect_errors(validate_no_duplicate_edges(workflow)):
         return ValidationResult.failure(all_errors)
-    
+
     # S4: Must have entry node
     if collect_errors(validate_has_entry_node(workflow)):
         return ValidationResult.failure(all_errors)
-    
+
     # S1: No cycles (requires valid edges)
     if collect_errors(validate_no_cycles(workflow)):
         return ValidationResult.failure(all_errors)
-    
+
     # S5: No orphans (requires acyclic graph)
     if collect_errors(validate_no_orphans(workflow)):
         return ValidationResult.failure(all_errors)
-    
+
     # Exit if structural errors and no semantic validation requested
     if all_errors and options.agent_registry is None:
         return ValidationResult.failure(all_errors)
-    
+
     # === Semantic Validation (requires agent registry) ===
-    
+
     if options.agent_registry is not None:
         # M1: Type compatibility
         if collect_errors(validate_type_compatibility(workflow, options.agent_registry)):
             return ValidationResult.failure(all_errors)
-        
+
         # M2: Required inputs satisfied
         if collect_errors(validate_required_inputs(workflow, options.agent_registry)):
             return ValidationResult.failure(all_errors)
-    
+
     # Return result
     if all_errors:
         return ValidationResult.failure(all_errors)
-    
+
     # Compute execution order for valid workflows
     execution_order = get_execution_order(workflow)
     return ValidationResult.success(execution_order=execution_order)

@@ -119,3 +119,10 @@ export function getPermissionTooltip(
   const result = checkPermission(role, action);
   return result.allowed ? undefined : result.reason;
 }
+
+/**
+ * Check if user is in read-only mode (VIEWER role).
+ */
+export function isReadOnly(role: Role): boolean {
+  return role === "VIEWER";
+}

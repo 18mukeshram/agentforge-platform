@@ -4,7 +4,7 @@
  * Main workflow canvas component using React Flow.
  */
 
-import { useCallback, useRef, useEffect } from "react";
+import { useCallback, useRef, useEffect, useMemo } from "react";
 import ReactFlow, {
   Background,
   MiniMap,
@@ -20,6 +20,7 @@ import ReactFlow, {
 } from "reactflow";
 import { useCanvasStore, useWorkflowStore, useUiStore, useExecutionStore } from "@/stores";
 import { useUpdateWorkflow, useValidateWorkflowPayload, useExecuteWorkflow } from "@/hooks";
+import { usePermissions } from "@/lib/permissions";
 import { nodeTypes } from "./nodes";
 import { getDefaultNodeConfig, getDefaultNodeLabel } from "./nodes/types";
 import { edgeTypes, ConnectionLine, validateConnection } from "./edges";
@@ -74,6 +75,10 @@ function WorkflowCanvasInner({ className }: WorkflowCanvasProps) {
   const updateWorkflow = useUpdateWorkflow(workflow?.id ?? "");
   const validateWorkflow = useValidateWorkflowPayload();
   const executeWorkflow = useExecuteWorkflow(workflow?.id ?? "");
+
+  // Permission check for read-only mode (Phase 13.4)
+  const { role, canWrite } = usePermissions();
+  const isReadOnlyMode = !canWrite();
 
   // Sync workflow to canvas on load
   useEffect(() => {
@@ -243,20 +248,36 @@ function WorkflowCanvasInner({ className }: WorkflowCanvasProps) {
     }
   }, [workflow, executeWorkflow, startExecution, setExecutionPanelOpen, addNotification]);
 
-  // Handle node changes
+  // Handle node changes (disabled in read-only mode for position/remove)
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {
+      if (isReadOnlyMode) {
+        // Only allow selection changes in read-only mode
+        const allowedChanges = changes.filter((c) => c.type === "select");
+        if (allowedChanges.length > 0) {
+          onNodesChange(allowedChanges);
+        }
+        return;
+      }
       onNodesChange(changes);
     },
-    [onNodesChange],
+    [onNodesChange, isReadOnlyMode],
   );
 
-  // Handle edge changes
+  // Handle edge changes (disabled in read-only mode)
   const handleEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
+      if (isReadOnlyMode) {
+        // Only allow selection changes in read-only mode  
+        const allowedChanges = changes.filter((c) => c.type === "select");
+        if (allowedChanges.length > 0) {
+          onEdgesChange(allowedChanges);
+        }
+        return;
+      }
       onEdgesChange(changes);
     },
-    [onEdgesChange],
+    [onEdgesChange, isReadOnlyMode],
   );
 
   // Validate connection before allowing it
@@ -278,9 +299,11 @@ function WorkflowCanvasInner({ className }: WorkflowCanvasProps) {
     [nodes, edges],
   );
 
-  // Handle new connections
+  // Handle new connections (disabled in read-only mode)
   const handleConnect = useCallback(
     (connection: Connection) => {
+      if (isReadOnlyMode) return; // Prevent connections in read-only mode
+      
       if (!connection.source || !connection.target) return;
 
       const validation = validateConnection(
@@ -303,7 +326,7 @@ function WorkflowCanvasInner({ className }: WorkflowCanvasProps) {
         });
       }
     },
-    [nodes, edges, onConnect, addNotification],
+    [nodes, edges, onConnect, addNotification, isReadOnlyMode],
   );
 
   // Handle click on canvas background
@@ -330,9 +353,11 @@ function WorkflowCanvasInner({ className }: WorkflowCanvasProps) {
     event.dataTransfer.dropEffect = "move";
   }, []);
 
-  // Handle drop from node palette
+  // Handle drop from node palette (disabled in read-only mode)
   const handleDrop = useCallback(
     (event: React.DragEvent) => {
+      if (isReadOnlyMode) return; // Prevent drops in read-only mode
+      
       event.preventDefault();
 
       const nodeType = event.dataTransfer.getData("application/reactflow-nodetype") as NodeType;
@@ -363,7 +388,7 @@ function WorkflowCanvasInner({ className }: WorkflowCanvasProps) {
 
       addNode(newNode);
     },
-    [addNode],
+    [addNode, isReadOnlyMode],
   );
 
   return (
@@ -419,11 +444,21 @@ function WorkflowCanvasInner({ className }: WorkflowCanvasProps) {
         />
       </ReactFlow>
 
-      {/* Canvas Toolbar */}
-      <Toolbar onSave={handleSave} onValidate={handleValidate} onRun={handleRun} />
+      {/* Read-Only Mode Badge (Phase 13.4) */}
+      {isReadOnlyMode && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50">
+          <div className="flex items-center gap-2 rounded-full bg-amber-100 border border-amber-300 px-4 py-1.5 text-sm font-medium text-amber-800 shadow-sm">
+            <EyeIcon className="h-4 w-4" />
+            Read-only mode (Viewer role)
+          </div>
+        </div>
+      )}
 
-      {/* Node Palette */}
-      <NodePalette />
+      {/* Canvas Toolbar */}
+      <Toolbar onSave={handleSave} onValidate={handleValidate} onRun={handleRun} isReadOnly={isReadOnlyMode} />
+
+      {/* Node Palette (hidden in read-only mode) */}
+      {!isReadOnlyMode && <NodePalette />}
 
       {/* Execution Logs Panel */}
       <ExecutionLogsPanel />

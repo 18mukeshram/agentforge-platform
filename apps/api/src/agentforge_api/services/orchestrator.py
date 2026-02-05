@@ -140,7 +140,12 @@ class ExecutionOrchestrator:
         Start executing a workflow.
         
         Validates workflow, generates plan, and dispatches entry node jobs.
+        For resumed executions, delegates to start_resumed_execution.
         """
+        # Check if this is a resumed execution
+        if execution.parent_execution_id is not None:
+            return await self.start_resumed_execution(workflow, execution)
+        
         # Validate workflow
         validation_result = validate_workflow_structure(workflow)
         if not validation_result.valid:
@@ -213,6 +218,117 @@ class ExecutionOrchestrator:
             await job_queue.add(job)
         
         return plan
+    
+    async def start_resumed_execution(
+        self,
+        workflow: Workflow,
+        execution: Execution,
+    ) -> ExecutionPlan:
+        """
+        Start a resumed execution.
+        
+        Skipped nodes (already completed in parent) remain COMPLETED.
+        Only dispatches jobs for nodes that need to re-run.
+        """
+        # Generate execution plan (same DAG structure)
+        plan = self.generate_plan(workflow, execution.id)
+        
+        # Track start time
+        self._start_times[execution.id] = datetime.now(timezone.utc)
+        
+        # Register execution tenant with WebSocket hub
+        tenant_id = execution_service.get_tenant_id(execution.id)
+        if tenant_id:
+            connection_hub.register_execution_tenant(execution.id, tenant_id)
+        
+        # Update execution status to RUNNING
+        execution_service.update_status(execution.id, ExecutionStatus.RUNNING)
+        
+        # Emit EXECUTION_STARTED event
+        await event_emitter.emit(execution_started(
+            execution_id=execution.id,
+            workflow_id=workflow.id,
+            node_count=len(workflow.nodes),
+        ))
+        
+        # Get current node states (skipped nodes are already COMPLETED)
+        state_map = execution.get_node_state_map()
+        
+        # Find resume entry nodes: nodes that are PENDING and have all dependencies COMPLETED
+        resume_entry_nodes = self._find_resume_entry_nodes(plan, state_map)
+        
+        if not resume_entry_nodes:
+            # No nodes to dispatch - execution is already done
+            await self._check_execution_complete(execution.id)
+            return plan
+        
+        # Dispatch jobs for resume entry nodes
+        node_map = workflow.get_node_map()
+        
+        for node_id in resume_entry_nodes:
+            node = node_map.get(node_id)
+            if node is None:
+                continue
+            
+            # Resolve inputs from parent's completed nodes (cached outputs)
+            node_inputs = self._resolve_node_inputs(
+                node_id=node_id,
+                execution_id=execution.id,
+                plan=plan,
+            )
+            
+            job = self._create_job(
+                execution=execution,
+                workflow=workflow,
+                node_id=node_id,
+                inputs=node_inputs,
+            )
+            
+            execution_service.update_node_state(
+                execution_id=execution.id,
+                node_id=node_id,
+                status=NodeExecutionStatus.QUEUED,
+            )
+            
+            await event_emitter.emit(node_queued(
+                execution_id=execution.id,
+                node_id=node_id,
+            ))
+            
+            await job_queue.add(job)
+        
+        return plan
+    
+    def _find_resume_entry_nodes(
+        self,
+        plan: ExecutionPlan,
+        state_map: dict[str, NodeExecutionState],
+    ) -> list[str]:
+        """
+        Find entry nodes for resume execution.
+        
+        These are PENDING nodes whose dependencies are all COMPLETED.
+        """
+        resume_entries = []
+        
+        for node_id in plan.execution_order:
+            state = state_map.get(node_id)
+            
+            # Only consider PENDING nodes
+            if state is None or state.status != NodeExecutionStatus.PENDING:
+                continue
+            
+            # Check if all dependencies are completed
+            dependencies = plan.dependencies.get(node_id, [])
+            all_deps_completed = all(
+                state_map.get(dep_id) and state_map.get(dep_id).status == NodeExecutionStatus.COMPLETED
+                for dep_id in dependencies
+            )
+            
+            if all_deps_completed:
+                resume_entries.append(node_id)
+        
+        return resume_entries
     
     async def _on_job_completed(self, result: JobResult) -> None:
         """Handle job completion."""

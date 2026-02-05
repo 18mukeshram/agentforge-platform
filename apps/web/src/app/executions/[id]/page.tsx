@@ -9,6 +9,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useExecution, useExecutionLogs } from "@/hooks";
+import { resumeExecution } from "@/lib/api/executions";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -41,6 +42,10 @@ export default function ExecutionDetailsPage({ params }: ExecutionDetailsPagePro
   const [replayIndex, setReplayIndex] = useState(-1);
   const [replaySpeedIndex, setReplaySpeedIndex] = useState(1); // Default 1x
   const [replayNodeStates, setReplayNodeStates] = useState<Map<string, NodeExecutionStatus>>(new Map());
+  
+  // Resume state (Phase 12.4)
+  const [isResuming, setIsResuming] = useState(false);
+  const [resumeError, setResumeError] = useState<string | null>(null);
   
   const replayTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -124,6 +129,23 @@ export default function ExecutionDetailsPage({ params }: ExecutionDetailsPagePro
     setReplaySpeedIndex((prev) => (prev + 1) % REPLAY_SPEEDS.length);
   }, []);
 
+  // Resume handler (Phase 12.4)
+  const handleResume = useCallback(async (nodeId: string) => {
+    if (!execution || isResuming) return;
+    
+    setIsResuming(true);
+    setResumeError(null);
+    
+    try {
+      const response = await resumeExecution(execution.id, { nodeId });
+      // Navigate to new execution
+      router.push(`/executions/${response.executionId}`);
+    } catch (err) {
+      setResumeError(err instanceof Error ? err.message : "Failed to resume execution");
+      setIsResuming(false);
+    }
+  }, [execution, isResuming, router]);
+
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -195,6 +217,10 @@ export default function ExecutionDetailsPage({ params }: ExecutionDetailsPagePro
         onSpeedChange={handleSpeedChange}
         hasFailed={execution.status === "failed"}
         failedNodeId={failedNodes[0]?.nodeId}
+        selectedNodeId={selectedNodeId}
+        onResume={handleResume}
+        isResuming={isResuming}
+        resumeError={resumeError}
       />
 
       {/* Error Alert for Failed Executions */}
@@ -256,6 +282,10 @@ function ReplayControlsBar({
   onSpeedChange,
   hasFailed,
   failedNodeId,
+  selectedNodeId,
+  onResume,
+  isResuming,
+  resumeError,
 }: {
   isReplaying: boolean;
   isPaused: boolean;
@@ -268,8 +298,15 @@ function ReplayControlsBar({
   onSpeedChange: () => void;
   hasFailed: boolean;
   failedNodeId?: string;
+  selectedNodeId?: string | null;
+  onResume?: (nodeId: string) => void;
+  isResuming?: boolean;
+  resumeError?: string | null;
 }) {
   const progress = totalEvents > 0 ? Math.max(0, (replayIndex + 1) / totalEvents) * 100 : 0;
+
+  // Use selected failed node or first failed node
+  const resumeNodeId = selectedNodeId || failedNodeId;
 
   return (
     <TooltipProvider>
@@ -341,17 +378,33 @@ function ReplayControlsBar({
         {/* Spacer */}
         {!isReplaying && <div className="flex-1" />}
 
-        {/* Resume Button (disabled, tooltip only) */}
+        {/* Resume Error */}
+        {resumeError && (
+          <span className="text-sm text-red-500">{resumeError}</span>
+        )}
+
+        {/* Resume Button (enabled!) */}
         {hasFailed && !isReplaying && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button size="sm" variant="outline" disabled className="opacity-50">
-                <RefreshIcon className="mr-2 h-4 w-4" />
-                Resume from {failedNodeId?.slice(0, 8)}...
+              <Button 
+                size="sm" 
+                variant="outline"
+                disabled={!resumeNodeId || isResuming}
+                onClick={() => resumeNodeId && onResume?.(resumeNodeId)}
+                className={cn(
+                  isResuming && "animate-pulse"
+                )}
+              >
+                <RefreshIcon className={cn("mr-2 h-4 w-4", isResuming && "animate-spin")} />
+                {isResuming ? "Resuming..." : `Resume from ${resumeNodeId?.slice(0, 8)}...`}
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              Resume execution from failed node (coming soon)
+              {selectedNodeId 
+                ? `Resume execution from selected node: ${selectedNodeId}`
+                : `Resume execution from failed node: ${failedNodeId}`
+              }
             </TooltipContent>
           </Tooltip>
         )}

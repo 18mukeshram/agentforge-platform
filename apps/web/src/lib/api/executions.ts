@@ -96,3 +96,37 @@ export async function getExecutionLogs(
     },
   });
 }
+
+/**
+ * Resume execution request.
+ */
+export interface ResumeExecutionRequest {
+  nodeId: string;
+}
+
+/**
+ * Resume execution response.
+ */
+export interface ResumeExecutionResponse {
+  executionId: string;
+  parentExecutionId: string;
+  resumedFromNodeId: string;
+  workflowId: string;
+  workflowVersion: number;
+  skippedNodes: string[];
+  rerunNodes: string[];
+  status: string;
+}
+
+/**
+ * Resume a failed execution from a specific node.
+ */
+export async function resumeExecution(
+  id: string,
+  data: ResumeExecutionRequest,
+): Promise<ResumeExecutionResponse> {
+  return apiClient.post<ResumeExecutionResponse>(
+    API_ENDPOINTS.resumeExecution(id),
+    { node_id: data.nodeId },
+  );
+}

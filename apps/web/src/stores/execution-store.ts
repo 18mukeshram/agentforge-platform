@@ -25,6 +25,16 @@ interface ExecutionState {
   // Connection
   isConnected: boolean;
   connectionError: string | null;
+
+  // Resume state (Phase 12.4)
+  isResuming: boolean;
+  resumeInfo: {
+    parentExecutionId: string;
+    resumedFromNodeId: string;
+    skippedCount: number;
+    rerunCount: number;
+  } | null;
+  reusedOutputNodes: Set<string>;
 }
 
 interface ExecutionActions {
@@ -48,6 +58,9 @@ interface ExecutionActions {
   // Connection
   setConnected: (connected: boolean) => void;
   setConnectionError: (error: string | null) => void;
+
+  // Resume (Phase 12.4)
+  setResuming: (isResuming: boolean) => void;
 }
 
 export interface ExecutionLog {
@@ -67,6 +80,10 @@ const initialState: ExecutionState = {
   logs: [],
   isConnected: false,
   connectionError: null,
+  // Resume state
+  isResuming: false,
+  resumeInfo: null,
+  reusedOutputNodes: new Set(),
 };
 
 export const useExecutionStore = create<ExecutionStore>()(
@@ -241,6 +258,50 @@ export const useExecutionStore = create<ExecutionStore>()(
             });
           }
           break;
+
+        // Resume events (Phase 12.4)
+        case "RESUME_START":
+          set((state) => {
+            state.resumeInfo = {
+              parentExecutionId: (payload.parentExecutionId as string) || "",
+              resumedFromNodeId: (payload.resumedFromNodeId as string) || "",
+              skippedCount: (payload.skippedCount as number) || 0,
+              rerunCount: (payload.rerunCount as number) || 0,
+            };
+          });
+          get().addLog({
+            timestamp: event.timestamp,
+            nodeId: payload.resumedFromNodeId as string || "",
+            level: "info",
+            message: `Resumed from node (parent: ${payload.parentExecutionId})`,
+          });
+          break;
+
+        case "NODE_OUTPUT_REUSED":
+          if (nodeId) {
+            set((state) => {
+              state.reusedOutputNodes.add(nodeId);
+            });
+            get().addLog({
+              timestamp: event.timestamp,
+              nodeId,
+              level: "info",
+              message: `Output reused from ${payload.sourceExecutionId}`,
+            });
+          }
+          break;
+
+        case "RESUME_COMPLETE":
+          set((state) => {
+            state.isResuming = false;
+          });
+          get().addLog({
+            timestamp: event.timestamp,
+            nodeId: "",
+            level: "info",
+            message: `Resume completed with status: ${payload.status}`,
+          });
+          break;
       }
     },
 
@@ -257,6 +318,16 @@ export const useExecutionStore = create<ExecutionStore>()(
       set((state) => {
         state.connectionError = error;
         state.isConnected = false;
+      }),
+
+    // Resume (Phase 12.4)
+    setResuming: (isResuming) =>
+      set((state) => {
+        state.isResuming = isResuming;
+        if (!isResuming) {
+          state.resumeInfo = null;
+          state.reusedOutputNodes = new Set();
+        }
       }),
   })),
 );

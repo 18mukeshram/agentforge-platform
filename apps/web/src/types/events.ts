@@ -24,7 +24,11 @@ export type EventType =
   // Connection
   | "CONNECTED"
   | "ACK"
-  | "ERROR";
+  | "ERROR"
+  // Resume events (Phase 12)
+  | "RESUME_START"
+  | "NODE_OUTPUT_REUSED"
+  | "RESUME_COMPLETE";
 
 /**
  * Base event structure from WebSocket.

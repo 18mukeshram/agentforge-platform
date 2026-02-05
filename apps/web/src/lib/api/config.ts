@@ -29,6 +29,7 @@ export const API_ENDPOINTS = {
   executeWorkflow: (workflowId: string) =>
     `/api/v1/executions/workflows/${workflowId}/execute`,
   cancelExecution: (id: string) => `/api/v1/executions/${id}/cancel`,
+  resumeExecution: (id: string) => `/api/v1/executions/${id}/resume`,
   executionLogs: (id: string) => `/api/v1/executions/${id}/logs`,
 
   // WebSocket

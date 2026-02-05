@@ -25,9 +25,12 @@ export {
   executeWorkflow,
   cancelExecution,
   getExecutionLogs,
+  resumeExecution,
 } from "./executions";
 export type {
   ListExecutionsParams,
   GetExecutionLogsParams,
   ExecutionLogsResponse,
+  ResumeExecutionRequest,
+  ResumeExecutionResponse,
 } from "./executions";

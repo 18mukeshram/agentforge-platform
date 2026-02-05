@@ -33,6 +33,8 @@ from agentforge_api.routes.dto import (
     ExecutionLogsResponse,
     NodeExecutionStateResponse,
     LogEntry,
+    ResumeExecutionRequest,
+    ResumeExecutionResponse,
 )
 
 
@@ -303,4 +305,114 @@ async def get_execution_logs(
     return ExecutionLogsResponse(
         items=logs,
         next_cursor=None,
+    )
+
+
+@router.post(
+    "/{execution_id}/resume",
+    status_code=201,
+    response_model=ResumeExecutionResponse,
+    dependencies=[Depends(require_write_access)],
+)
+async def resume_execution(
+    execution_id: str,
+    request: ResumeExecutionRequest,
+    auth: Auth,
+) -> ResumeExecutionResponse:
+    """
+    Resume a failed execution from a specific failed node.
+    
+    Creates a new execution with lineage to the original.
+    Does NOT start execution - only creates the resume plan.
+    
+    Requires: MEMBER, ADMIN, or OWNER role.
+    Enforces tenant isolation.
+    
+    Validation:
+    - Execution must exist
+    - Execution must be FAILED
+    - Node must exist in execution
+    - Node must be in FAILED status
+    - Workflow version must match
+    """
+    from agentforge_api.services.execution_service import compute_downstream_nodes
+    from agentforge_api.core.exceptions import ResumeNotAllowedError
+    
+    # Get execution (enforces tenant isolation)
+    execution = execution_service.get(execution_id, auth.tenant_id)
+    
+    # Validate execution is failed
+    if execution.status != ExecutionStatus.FAILED:
+        raise ResumeNotAllowedError(
+            execution_id,
+            f"Execution status is '{execution.status.value}', must be 'failed'",
+        )
+    
+    # Validate node exists in execution
+    state_map = execution.get_node_state_map()
+    node_state = state_map.get(request.node_id)
+    
+    if node_state is None:
+        raise ResumeNotAllowedError(
+            execution_id,
+            f"Node '{request.node_id}' not found in execution",
+        )
+    
+    # Validate node is failed
+    if node_state.status != NodeExecutionStatus.FAILED:
+        raise ResumeNotAllowedError(
+            execution_id,
+            f"Node '{request.node_id}' status is '{node_state.status.value}', must be 'failed'",
+        )
+    
+    # Get current workflow (ensure workflow is retrievable)
+    workflow = workflow_service.get(execution.workflow_id, auth.tenant_id)
+    
+    # Validate workflow version matches
+    if workflow.meta.version != execution.workflow_version:
+        raise ResumeNotAllowedError(
+            execution_id,
+            f"Workflow version changed (was {execution.workflow_version}, now {workflow.meta.version})",
+        )
+    
+    # Validate node still exists in workflow
+    workflow_node_ids = {node.id for node in workflow.nodes}
+    if request.node_id not in workflow_node_ids:
+        raise ResumeNotAllowedError(
+            execution_id,
+            f"Node '{request.node_id}' no longer exists in workflow",
+        )
+    
+    # Compute skip/rerun plan
+    skipped_nodes, rerun_nodes = compute_downstream_nodes(workflow, request.node_id)
+    
+    # Validate all upstream nodes completed
+    for node_id in skipped_nodes:
+        upstream_state = state_map.get(node_id)
+        if upstream_state and upstream_state.status != NodeExecutionStatus.COMPLETED:
+            raise ResumeNotAllowedError(
+                execution_id,
+                f"Upstream node '{node_id}' is not completed (status: {upstream_state.status.value})",
+            )
+    
+    # Create new execution with lineage
+    new_execution = execution_service.create_resumed(
+        parent_execution=execution,
+        workflow=workflow,
+        resume_from_node_id=request.node_id,
+        triggered_by=auth.user_id,
+        tenant_id=auth.tenant_id,
+        skipped_nodes=skipped_nodes,
+        rerun_nodes=rerun_nodes,
+    )
+    
+    return ResumeExecutionResponse(
+        execution_id=new_execution.id,
+        parent_execution_id=execution.id,
+        resumed_from_node_id=request.node_id,
+        workflow_id=workflow.id,
+        workflow_version=workflow.meta.version,
+        skipped_nodes=skipped_nodes,
+        rerun_nodes=rerun_nodes,
+        status=new_execution.status,
     )

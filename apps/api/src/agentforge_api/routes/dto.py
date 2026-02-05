@@ -166,3 +166,28 @@ class ExecutionLogsResponse(BaseModel):
     
     items: list[LogEntry]
     next_cursor: str | None = None
+
+
+# === Resume DTOs (Phase 12) ===
+
+
+class ResumeExecutionRequest(BaseModel):
+    """Request body for resuming a failed execution."""
+    
+    node_id: str = Field(
+        ...,
+        description="Node ID to resume from (must be a failed node)",
+    )
+
+
+class ResumeExecutionResponse(BaseModel):
+    """Response for resume execution endpoint."""
+    
+    execution_id: str = Field(description="New execution ID")
+    parent_execution_id: str = Field(description="Original failed execution ID")
+    resumed_from_node_id: str = Field(description="Node ID resumed from")
+    workflow_id: str
+    workflow_version: int
+    skipped_nodes: list[str] = Field(description="Nodes that will be skipped (already completed)")
+    rerun_nodes: list[str] = Field(description="Nodes that will be re-executed")
+    status: ExecutionStatus = ExecutionStatus.PENDING

@@ -65,6 +65,10 @@ class Execution(BaseModel, frozen=True):
     started_at: datetime | None = None
     completed_at: datetime | None = None
     
+    # Resume lineage (Phase 12)
+    parent_execution_id: str | None = None
+    resumed_from_node_id: str | None = None
+    
     # Per-node execution state
     node_states: list[NodeExecutionState] = Field(default_factory=list)
     

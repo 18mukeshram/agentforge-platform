@@ -25,6 +25,7 @@ class ErrorCode(str, Enum):
     MISSING_INPUTS = "MISSING_INPUTS"
     VERSION_CONFLICT = "VERSION_CONFLICT"
     INVALID_CURSOR = "INVALID_CURSOR"
+    RESUME_NOT_ALLOWED = "RESUME_NOT_ALLOWED"
     
     # Auth errors
     UNAUTHORIZED = "UNAUTHORIZED"
@@ -200,3 +201,16 @@ class ForbiddenError(APIException):
             message=message,
             status_code=403,
         )
+
+
+class ResumeNotAllowedError(APIException):
+    """Execution cannot be resumed."""
+    
+    def __init__(self, execution_id: str, reason: str) -> None:
+        super().__init__(
+            code=ErrorCode.RESUME_NOT_ALLOWED,
+            message=f"Cannot resume execution {execution_id}: {reason}",
+            status_code=400,
+        )
+        self.execution_id = execution_id
+        self.reason = reason

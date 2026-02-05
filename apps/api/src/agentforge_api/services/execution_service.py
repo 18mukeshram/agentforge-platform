@@ -303,6 +303,115 @@ class ExecutionService:
             return None
         
         return state.output
+    
+    def create_resumed(
+        self,
+        parent_execution: Execution,
+        workflow: Workflow,
+        resume_from_node_id: str,
+        triggered_by: str,
+        tenant_id: str,
+        skipped_nodes: list[str],
+        rerun_nodes: list[str],
+    ) -> Execution:
+        """
+        Create a new execution resumed from a failed execution.
+        
+        - Skipped nodes get COMPLETED status with copied outputs
+        - Rerun nodes get PENDING status
+        """
+        from uuid import uuid4
+        
+        execution_id = str(uuid4())
+        now = datetime.now(timezone.utc)
+        
+        parent_state_map = parent_execution.get_node_state_map()
+        
+        node_states = []
+        for node in workflow.nodes:
+            if node.id in skipped_nodes:
+                # Copy completed state from parent
+                parent_state = parent_state_map.get(node.id)
+                if parent_state and parent_state.status == NodeExecutionStatus.COMPLETED:
+                    node_states.append(NodeExecutionState(
+                        node_id=node.id,
+                        status=NodeExecutionStatus.COMPLETED,
+                        started_at=parent_state.started_at,
+                        completed_at=parent_state.completed_at,
+                        output=parent_state.output,
+                    ))
+                else:
+                    # Fallback - mark as completed
+                    node_states.append(NodeExecutionState(
+                        node_id=node.id,
+                        status=NodeExecutionStatus.COMPLETED,
+                    ))
+            else:
+                # Pending for re-execution
+                node_states.append(NodeExecutionState(
+                    node_id=node.id,
+                    status=NodeExecutionStatus.PENDING,
+                ))
+        
+        execution = Execution(
+            id=execution_id,
+            workflow_id=workflow.id,
+            status=ExecutionStatus.PENDING,
+            workflow_version=workflow.meta.version,
+            triggered_by=triggered_by,
+            created_at=now,
+            node_states=node_states,
+            inputs=parent_execution.inputs,
+            parent_execution_id=parent_execution.id,
+            resumed_from_node_id=resume_from_node_id,
+        )
+        
+        self._executions[execution_id] = execution
+        self._execution_tenants[execution_id] = tenant_id
+        
+        return execution
+
+
+def compute_downstream_nodes(
+    workflow: Workflow,
+    start_node_id: str,
+) -> tuple[list[str], list[str]]:
+    """
+    Compute which nodes are skipped vs re-run when resuming from a node.
+    
+    Returns (skipped_nodes, rerun_nodes).
+    
+    Algorithm:
+    - Rerun nodes = start_node + all nodes reachable from start_node via edges
+    - Skipped nodes = all other nodes
+    """
+    # Build adjacency list (source -> [targets])
+    adjacency: dict[str, list[str]] = {}
+    for node in workflow.nodes:
+        adjacency[node.id] = []
+    for edge in workflow.edges:
+        if edge.source in adjacency:
+            adjacency[edge.source].append(edge.target)
+    
+    # BFS to find all downstream nodes
+    rerun_set: set[str] = {start_node_id}
+    queue = [start_node_id]
+    
+    while queue:
+        current = queue.pop(0)
+        for target in adjacency.get(current, []):
+            if target not in rerun_set:
+                rerun_set.add(target)
+                queue.append(target)
+    
+    # All nodes in workflow
+    all_node_ids = {node.id for node in workflow.nodes}
+    
+    # Skipped = all - rerun
+    skipped_nodes = list(all_node_ids - rerun_set)
+    rerun_nodes = list(rerun_set)
+    
+    return skipped_nodes, rerun_nodes
 
 
 # Singleton instance

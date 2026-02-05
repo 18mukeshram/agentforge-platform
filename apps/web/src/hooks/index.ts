@@ -14,6 +14,7 @@ export {
 
 export {
   useExecutions,
+  useAllExecutions,
   useExecution,
   useExecutionLogs,
   useExecuteWorkflow,

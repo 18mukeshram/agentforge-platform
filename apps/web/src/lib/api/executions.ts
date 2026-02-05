@@ -50,6 +50,32 @@ export async function listExecutions(
 }
 
 /**
+ * Params for listing all executions.
+ */
+export interface ListAllExecutionsParams {
+  workflowId?: string;
+  status?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * List all executions with pagination (offset-based).
+ */
+export async function listAllExecutions(
+  params?: ListAllExecutionsParams,
+): Promise<ExecutionListResponse> {
+  return apiClient.get<ExecutionListResponse>(API_ENDPOINTS.executions, {
+    params: {
+      workflow_id: params?.workflowId,
+      status: params?.status,
+      limit: params?.limit,
+      offset: params?.offset,
+    },
+  });
+}
+
+/**
  * Get an execution by ID.
  */
 export async function getExecution(id: string): Promise<Execution> {

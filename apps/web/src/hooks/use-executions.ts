@@ -6,11 +6,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query/keys";
 import {
   listExecutions,
+  listAllExecutions,
   getExecution,
   executeWorkflow,
   cancelExecution,
   getExecutionLogs,
   type ListExecutionsParams,
+  type ListAllExecutionsParams,
   type GetExecutionLogsParams,
 } from "@/lib/api";
 import type { ExecuteWorkflowRequest } from "@/types";
@@ -26,6 +28,16 @@ export function useExecutions(params: ListExecutionsParams) {
     ),
     queryFn: () => listExecutions(params),
     enabled: !!params.workflowId,
+  });
+}
+
+/**
+ * Hook to fetch all executions with pagination.
+ */
+export function useAllExecutions(params?: ListAllExecutionsParams) {
+  return useQuery({
+    queryKey: ["executions", "all", params],
+    queryFn: () => listAllExecutions(params),
   });
 }
 

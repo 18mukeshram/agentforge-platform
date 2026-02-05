@@ -21,6 +21,7 @@ export type { ListWorkflowsParams } from "./workflows";
 // Execution API
 export {
   listExecutions,
+  listAllExecutions,
   getExecution,
   executeWorkflow,
   cancelExecution,
@@ -29,6 +30,7 @@ export {
 } from "./executions";
 export type {
   ListExecutionsParams,
+  ListAllExecutionsParams,
   GetExecutionLogsParams,
   ExecutionLogsResponse,
   ResumeExecutionRequest,

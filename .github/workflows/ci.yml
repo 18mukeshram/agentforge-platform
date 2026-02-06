@@ -85,7 +85,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
-          cache-dependency-path: apps/web/package-lock.json
+          cache-dependency-path: apps/web/package.json
 
       - name: Install dependencies
         run: npm ci
@@ -121,7 +121,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
-          cache-dependency-path: packages/contracts/package-lock.json
+          cache-dependency-path: packages/contracts/package.json
 
       - name: Install dependencies
         run: npm ci --if-present || echo "No package.json found, skipping"

@@ -17,6 +17,7 @@ from agentforge_api.models import (
     WorkflowStatus,
 )
 from agentforge_api.models import ValidationError as DomainValidationError
+from agentforge_api.routes.dto import CamelModel
 from agentforge_api.services.workflow_service import workflow_service
 from agentforge_api.validation import (
     AgentRegistry,
@@ -34,7 +35,7 @@ class ValidateWorkflowRequest(BaseModel):
     edges: list[Edge]
 
 
-class ValidationResponse(BaseModel):
+class ValidationResponse(CamelModel):
     """Response for validation endpoints."""
 
     valid: bool

@@ -109,7 +109,7 @@ async def test_create_and_execute_workflow(client: AsyncClient):
 
     validation = response.json()
     assert validation["valid"] is True
-    assert validation["execution_order"] == ["node_1", "node_2"]
+    assert validation["executionOrder"] == ["node_1", "node_2"]
 
     # 3. Execute the workflow
     execute_data = {"inputs": {"message": "Hello, World!"}}
@@ -120,7 +120,7 @@ async def test_create_and_execute_workflow(client: AsyncClient):
     assert response.status_code == 202
 
     execution = response.json()
-    execution_id = execution["execution_id"]
+    execution_id = execution["executionId"]
     assert execution["status"] == "running"
 
     # 4. Wait for execution to complete (drain the queue)
@@ -132,10 +132,10 @@ async def test_create_and_execute_workflow(client: AsyncClient):
 
     result = response.json()
     assert result["status"] == "completed"
-    assert len(result["node_states"]) == 2
+    assert len(result["nodeStates"]) == 2
 
     # Verify all nodes completed
-    for node_state in result["node_states"]:
+    for node_state in result["nodeStates"]:
         assert node_state["status"] == "completed"
 
 
@@ -165,7 +165,7 @@ async def test_cancel_execution(client: AsyncClient):
     response = await client.post(
         f"/api/v1/executions/workflows/{workflow_id}/execute", json={"inputs": {}}
     )
-    execution_id = response.json()["execution_id"]
+    execution_id = response.json()["executionId"]
 
     # Cancel immediately
     response = await client.post(f"/api/v1/executions/{execution_id}/cancel")

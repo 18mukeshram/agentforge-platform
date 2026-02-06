@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
-import { useWorkflow } from "@/hooks";
-import { useWorkflowStore } from "@/stores";
+import { useWorkflow, useUpdateWorkflow, useExecuteWorkflow } from "@/hooks";
+import { useWorkflowStore, useUiStore } from "@/stores";
 import { WorkflowCanvas } from "@/components/canvas/workflow-canvas";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,8 +16,15 @@ export default function WorkflowEditorPage() {
   const { data: workflowData, isLoading, error } = useWorkflow(workflowId);
 
   // Workflow store
-  const { workflow, setWorkflow, setLoading, setError, isDirty, isSaving } =
+  const { workflow, setWorkflow, setLoading, setError, isDirty, isSaving, setSaving, setLastSavedAt } =
     useWorkflowStore();
+
+  // UI store for notifications
+  const { addNotification, setExecutionPanelOpen } = useUiStore();
+
+  // Mutations
+  const updateWorkflow = useUpdateWorkflow(workflowId);
+  const executeWorkflow = useExecuteWorkflow(workflowId);
 
   // Sync fetched data to store
   useEffect(() => {
@@ -48,6 +55,60 @@ export default function WorkflowEditorPage() {
       );
     }
   }, [isLoading, error, setLoading, setError]);
+
+  // Handle save
+  const handleSave = useCallback(async () => {
+    if (!workflow || !isDirty) return;
+
+    setSaving(true);
+    try {
+      await updateWorkflow.mutateAsync({
+        nodes: workflow.nodes,
+        edges: workflow.edges,
+        version: workflow.meta.version,
+      });
+      setLastSavedAt(new Date().toISOString());
+      addNotification({
+        type: "success",
+        title: "Workflow Saved",
+        message: "Your changes have been saved successfully.",
+        duration: 3000,
+      });
+    } catch (err) {
+      addNotification({
+        type: "error",
+        title: "Save Failed",
+        message: err instanceof Error ? err.message : "Failed to save workflow",
+        duration: 5000,
+      });
+    } finally {
+      setSaving(false);
+    }
+  }, [workflow, isDirty, setSaving, updateWorkflow, setLastSavedAt, addNotification]);
+
+  // Handle run
+  const handleRun = useCallback(async () => {
+    if (!workflow || workflow.status !== "valid") return;
+
+    try {
+      const result = await executeWorkflow.mutateAsync({ inputs: {} });
+      // Set active execution ID to trigger WebSocket connection
+      setExecutionPanelOpen(true);
+      addNotification({
+        type: "success",
+        title: "Execution Started",
+        message: `Execution ${result.executionId.slice(0, 8)}... has begun.`,
+        duration: 3000,
+      });
+    } catch (err) {
+      addNotification({
+        type: "error",
+        title: "Execution Failed",
+        message: err instanceof Error ? err.message : "Failed to start execution",
+        duration: 5000,
+      });
+    }
+  }, [workflow, executeWorkflow, setExecutionPanelOpen, addNotification]);
 
   // Loading state
   if (isLoading) {
@@ -97,11 +158,20 @@ export default function WorkflowEditorPage() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" disabled={!isDirty || isSaving}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!isDirty || isSaving}
+            onClick={handleSave}
+          >
             {isSaving ? "Saving..." : "Save"}
           </Button>
-          <Button size="sm" disabled={workflow.status !== "valid"}>
-            Run
+          <Button
+            size="sm"
+            disabled={workflow.status !== "valid" || executeWorkflow.isPending}
+            onClick={handleRun}
+          >
+            {executeWorkflow.isPending ? "Starting..." : "Run"}
           </Button>
         </div>
       </div>

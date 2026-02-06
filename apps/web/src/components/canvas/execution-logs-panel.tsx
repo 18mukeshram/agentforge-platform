@@ -80,7 +80,7 @@ export function ExecutionLogsPanel({ className }: ExecutionLogsPanelProps) {
       </div>
 
       {/* Execution Info */}
-      {activeExecution && (
+      {activeExecution && activeExecution.id && (
         <div className="border-b bg-muted/30 px-3 py-1.5">
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground">

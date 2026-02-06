@@ -99,9 +99,14 @@ function WorkflowCanvasInner({ className }: WorkflowCanvasProps) {
   const { role, canWrite } = usePermissions();
   const isReadOnlyMode = !canWrite();
 
-  // Sync workflow to canvas on load
+  // Track sync direction to prevent infinite loops
+  const isSyncingFromWorkflow = useRef(false);
+  const isSyncingToWorkflow = useRef(false);
+
+  // Sync workflow to canvas on load (only when workflow changes externally)
   useEffect(() => {
-    if (workflow) {
+    if (workflow && !isSyncingToWorkflow.current) {
+      isSyncingFromWorkflow.current = true;
       const { nodes: canvasNodes, edges: canvasEdges } = toCanvasElements(
         workflow.nodes,
         workflow.edges,
@@ -111,19 +116,25 @@ function WorkflowCanvasInner({ className }: WorkflowCanvasProps) {
 
       setTimeout(() => {
         fitView({ padding: 0.2 });
+        isSyncingFromWorkflow.current = false;
       }, 100);
     }
-  }, [workflow, setNodes, setEdges, fitView]);
+  }, [workflow?.id, workflow?.meta.version]); // Only sync on workflow ID or version change
 
-  // Sync canvas changes back to workflow store
+  // Sync canvas changes back to workflow store (only when canvas changes by user)
   useEffect(() => {
-    if (nodes.length > 0 || edges.length > 0) {
+    if (!isSyncingFromWorkflow.current && (nodes.length > 0 || edges.length > 0)) {
+      isSyncingToWorkflow.current = true;
       const { nodes: workflowNodes, edges: workflowEdges } = fromCanvasElements(
         nodes,
         edges,
       );
       setWorkflowNodes(workflowNodes);
       setWorkflowEdges(workflowEdges);
+      // Reset flag after microtask
+      Promise.resolve().then(() => {
+        isSyncingToWorkflow.current = false;
+      });
     }
   }, [nodes, edges, setWorkflowNodes, setWorkflowEdges]);
 

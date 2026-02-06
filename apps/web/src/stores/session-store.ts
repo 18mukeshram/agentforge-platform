@@ -9,12 +9,14 @@ import type { Role, User } from "@/types";
 
 interface SessionState {
   user: User | null;
+  token: string | null;  // JWT token
   isAuthenticated: boolean;
   isLoading: boolean;
 }
 
 interface SessionActions {
   setUser: (user: User | null) => void;
+  setToken: (token: string | null) => void;
   setLoading: (loading: boolean) => void;
   clear: () => void;
 }
@@ -30,6 +32,8 @@ const initialState: SessionState = {
     role: "MEMBER" as Role,
     tenantId: "demo-tenant",
   },
+  // Dev token for local development (valid for 1 year)
+  token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkZW1vLXVzZXIiLCJ0ZW5hbnRfaWQiOiJkZW1vLXRlbmFudCIsInJvbGUiOiJNRU1CRVIiLCJleHAiOjE4MDE4MzkyOTl9.gHQLU2Lkw0n8uFzPXRdDk9nj5umFc_M77gt8RBYmGOE",
   isAuthenticated: true,
   isLoading: false,
 };
@@ -44,6 +48,11 @@ export const useSessionStore = create<SessionStore>()(
         state.isAuthenticated = user !== null;
       }),
 
+    setToken: (token) =>
+      set((state) => {
+        state.token = token;
+      }),
+
     setLoading: (loading) =>
       set((state) => {
         state.isLoading = loading;
@@ -52,6 +61,7 @@ export const useSessionStore = create<SessionStore>()(
     clear: () =>
       set((state) => {
         state.user = null;
+        state.token = null;
         state.isAuthenticated = false;
       }),
   }))

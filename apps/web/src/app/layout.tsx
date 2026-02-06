@@ -4,6 +4,7 @@ import "./globals.css";
 import { AppShell } from "@/components/layout";
 import { QueryProvider } from "@/lib/query";
 import { NotificationToast } from "@/components/ui/notification-toast";
+import { AuthInitializer } from "@/components/auth/auth-initializer";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -21,6 +22,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <QueryProvider>
+          <AuthInitializer />
           <AppShell>{children}</AppShell>
           <NotificationToast />
         </QueryProvider>

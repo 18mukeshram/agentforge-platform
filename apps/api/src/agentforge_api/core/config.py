@@ -21,12 +21,16 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
 
+    # Authentication
+    jwt_secret: str = "dev-secret-change-in-production"
+
     # CORS (will be configured properly in production)
     cors_origins: list[str] = ["http://localhost:3000"]
 
     class Config:
         env_prefix = "AGENTFORGE_"
         env_file = ".env"
+        extra = "ignore"
 
 
 settings = Settings()

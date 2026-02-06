@@ -143,25 +143,29 @@ async def get_execution(
 @router.get("", response_model=ExecutionListResponse)
 async def list_executions(
     auth: Auth,
-    workflow_id: str = Query(..., description="Filter by workflow ID"),
+    workflow_id: str | None = Query(default=None, description="Filter by workflow ID"),
+    status: str | None = Query(default=None, description="Filter by status"),
     limit: int = Query(default=20, ge=1, le=100),
     cursor: str | None = Query(default=None),
 ) -> ExecutionListResponse:
     """
-    List executions for a workflow.
+    List executions.
 
     Requires: Any authenticated role (VIEWER+).
     Supports cursor-based pagination.
+    Can filter by workflow_id and/or status.
     Enforces tenant isolation.
     """
-    # Verify workflow belongs to tenant
-    workflow_service.get(workflow_id, auth.tenant_id)
+    # If workflow_id is provided, verify it belongs to tenant
+    if workflow_id:
+        workflow_service.get(workflow_id, auth.tenant_id)
 
     executions, next_cursor = execution_service.list_by_workflow(
         workflow_id=workflow_id,
         tenant_id=auth.tenant_id,
         limit=limit,
         cursor=cursor,
+        status=status,
     )
 
     items = [

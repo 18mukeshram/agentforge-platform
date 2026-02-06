@@ -96,24 +96,31 @@ class ExecutionService:
 
     def list_by_workflow(
         self,
-        workflow_id: str,
+        workflow_id: str | None,
         tenant_id: str,
         limit: int = 20,
         cursor: str | None = None,
+        status: str | None = None,
     ) -> tuple[list[Execution], str | None]:
         """
-        List executions for a workflow.
+        List executions with optional filters.
 
         Returns (executions, next_cursor).
         Enforces tenant isolation.
         """
-        # Filter by workflow and tenant
-        executions = [
-            e
-            for e in self._executions.values()
-            if e.workflow_id == workflow_id
-            and self._execution_tenants.get(e.id) == tenant_id
-        ]
+        # Filter by tenant, and optionally by workflow and status
+        executions = []
+        for e in self._executions.values():
+            # Must match tenant
+            if self._execution_tenants.get(e.id) != tenant_id:
+                continue
+            # Optionally filter by workflow
+            if workflow_id is not None and e.workflow_id != workflow_id:
+                continue
+            # Optionally filter by status
+            if status is not None and e.status.value != status:
+                continue
+            executions.append(e)
 
         # Sort by created_at descending
         executions.sort(key=lambda e: e.created_at, reverse=True)

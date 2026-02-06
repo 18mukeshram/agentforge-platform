@@ -13,7 +13,7 @@ services:
       target: production # Can switch to 'builder' for dev
     environment:
       - AGENTFORGE_DEBUG=true
-    volumes:
+    volumes: []
       # Mount source for development (optional - comment out for production-like testing)
       # - ./apps/api/src:/app/src:ro
     labels:

@@ -31,6 +31,7 @@ from agentforge_api.routes import (
 )
 from agentforge_api.services.cache import result_cache
 from agentforge_api.services.orchestrator import orchestrator
+from agentforge_api.services.seed_data import seed_demo_data
 
 
 @asynccontextmanager
@@ -42,6 +43,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """
     # Startup
     print(f"Starting {settings.app_name} v{settings.app_version}")
+
+    # Seed demo data for development
+    seed_demo_data()
 
     # Initialize WebSocket hub
     await connection_hub.initialize()

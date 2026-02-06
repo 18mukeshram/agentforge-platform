@@ -5,7 +5,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from agentforge_api.models import (
     Edge,
@@ -15,6 +15,22 @@ from agentforge_api.models import (
     ValidationError,
     WorkflowStatus,
 )
+
+
+def to_camel(string: str) -> str:
+    """Convert snake_case to camelCase."""
+    components = string.split("_")
+    return components[0] + "".join(x.title() for x in components[1:])
+
+
+class CamelModel(BaseModel):
+    """Base model with camelCase serialization."""
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        serialize_by_alias=True,
+    )
 
 # === Workflow DTOs (existing) ===
 
@@ -40,7 +56,7 @@ class UpdateWorkflowRequest(BaseModel):
     )
 
 
-class WorkflowResponse(BaseModel):
+class WorkflowResponse(CamelModel):
     """Full workflow response."""
 
     id: str
@@ -56,7 +72,7 @@ class WorkflowResponse(BaseModel):
     validation_errors: list[ValidationError] | None = None
 
 
-class WorkflowSummary(BaseModel):
+class WorkflowSummary(CamelModel):
     """Workflow summary for list responses."""
 
     id: str
@@ -66,7 +82,7 @@ class WorkflowSummary(BaseModel):
     node_count: int
 
 
-class WorkflowListResponse(BaseModel):
+class WorkflowListResponse(CamelModel):
     """Response for workflow list endpoint."""
 
     items: list[WorkflowSummary]
@@ -92,7 +108,7 @@ class ExecuteWorkflowRequest(BaseModel):
     )
 
 
-class NodeExecutionStateResponse(BaseModel):
+class NodeExecutionStateResponse(CamelModel):
     """Execution state for a single node."""
 
     node_id: str
@@ -104,7 +120,7 @@ class NodeExecutionStateResponse(BaseModel):
     output: Any | None = None
 
 
-class ExecutionResponse(BaseModel):
+class ExecutionResponse(CamelModel):
     """Full execution response."""
 
     id: str
@@ -120,7 +136,7 @@ class ExecutionResponse(BaseModel):
     outputs: dict[str, Any] | None = None
 
 
-class ExecutionSummary(BaseModel):
+class ExecutionSummary(CamelModel):
     """Execution summary for list responses."""
 
     id: str
@@ -130,14 +146,14 @@ class ExecutionSummary(BaseModel):
     completed_at: datetime | None = None
 
 
-class ExecutionListResponse(BaseModel):
+class ExecutionListResponse(CamelModel):
     """Response for execution list endpoint."""
 
     items: list[ExecutionSummary]
     next_cursor: str | None = None
 
 
-class ExecutionTriggerResponse(BaseModel):
+class ExecutionTriggerResponse(CamelModel):
     """Response when execution is triggered (202 Accepted)."""
 
     execution_id: str
@@ -153,7 +169,7 @@ class ExecutionCancelResponse(BaseModel):
     status: ExecutionStatus
 
 
-class LogEntry(BaseModel):
+class LogEntry(CamelModel):
     """A single log entry from execution."""
 
     timestamp: datetime
@@ -162,7 +178,7 @@ class LogEntry(BaseModel):
     message: str
 
 
-class ExecutionLogsResponse(BaseModel):
+class ExecutionLogsResponse(CamelModel):
     """Response for execution logs endpoint."""
 
     items: list[LogEntry]
@@ -181,7 +197,7 @@ class ResumeExecutionRequest(BaseModel):
     )
 
 
-class ResumeExecutionResponse(BaseModel):
+class ResumeExecutionResponse(CamelModel):
     """Response for resume execution endpoint."""
 
     execution_id: str = Field(description="New execution ID")

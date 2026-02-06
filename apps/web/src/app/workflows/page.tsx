@@ -1,34 +1,31 @@
+"use client";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
-
-// Mock data for now
-const mockWorkflows = [
-  {
-    id: "workflow-1",
-    name: "Customer Support Bot",
-    status: "valid" as const,
-    updatedAt: "2024-01-15T10:30:00Z",
-    nodeCount: 5,
-  },
-  {
-    id: "workflow-2",
-    name: "Data Processing Pipeline",
-    status: "draft" as const,
-    updatedAt: "2024-01-14T15:45:00Z",
-    nodeCount: 8,
-  },
-  {
-    id: "workflow-3",
-    name: "RAG Assistant",
-    status: "invalid" as const,
-    updatedAt: "2024-01-13T09:20:00Z",
-    nodeCount: 3,
-  },
-];
+import { useWorkflows } from "@/hooks";
 
 export default function WorkflowsPage() {
+  const { data, isLoading, error } = useWorkflows();
+  const workflows = data?.items ?? [];
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center">
+        <div className="text-muted-foreground">Loading workflows...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center">
+        <div className="text-destructive">Failed to load workflows: {error.message}</div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-8 p-8">
       <div className="flex items-center justify-between">
@@ -45,7 +42,7 @@ export default function WorkflowsPage() {
 
       {/* Workflow Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {mockWorkflows.map((workflow) => (
+        {workflows.map((workflow) => (
           <Link key={workflow.id} href={`/workflows/${workflow.id}`}>
             <Card className="cursor-pointer transition-shadow hover:shadow-md">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -77,7 +74,7 @@ export default function WorkflowsPage() {
         ))}
       </div>
 
-      {mockWorkflows.length === 0 && (
+      {workflows.length === 0 && (
         <div className="flex min-h-[400px] items-center justify-center rounded-lg border border-dashed">
           <div className="text-center">
             <p className="text-muted-foreground">No workflows yet.</p>

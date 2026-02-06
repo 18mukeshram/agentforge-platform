@@ -3,7 +3,7 @@
 """Workflow domain models."""
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Annotated, NewType
 
 from pydantic import BaseModel, Field
@@ -14,7 +14,7 @@ from agentforge_api.models.node import Node
 WorkflowId = NewType("WorkflowId", str)
 
 
-class WorkflowStatus(str, Enum):
+class WorkflowStatus(StrEnum):
     """Lifecycle status of a workflow definition."""
 
     DRAFT = "draft"  # Being edited, not executable

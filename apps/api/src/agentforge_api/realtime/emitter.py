@@ -41,9 +41,7 @@ class EventEmitter:
         # Lock for thread-safe modifications
         self._lock = asyncio.Lock()
 
-    async def subscribe_all(
-        self, handler: EventHandler
-    ) -> Callable[[], Awaitable[None]]:
+    async def subscribe_all(self, handler: EventHandler) -> Callable[[], Awaitable[None]]:
         """
         Subscribe to all events.
 

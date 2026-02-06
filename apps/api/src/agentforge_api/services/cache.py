@@ -42,9 +42,7 @@ class CacheKey:
 
     def __str__(self) -> str:
         """String representation for storage key."""
-        return (
-            f"{self.tenant_id}:{self.agent_id}:{self.agent_version}:{self.inputs_hash}"
-        )
+        return f"{self.tenant_id}:{self.agent_id}:{self.agent_version}:{self.inputs_hash}"
 
 
 @dataclass(frozen=True)
@@ -153,9 +151,7 @@ class ResultCache:
         self._store: dict[str, CacheEntry] = {}
         self._hits: int = 0
         self._misses: int = 0
-        self._tenant_stats: dict[str, dict[str, int]] = (
-            {}
-        )  # tenant_id -> {hits, misses}
+        self._tenant_stats: dict[str, dict[str, int]] = {}  # tenant_id -> {hits, misses}
 
     def get(self, key: CacheKey) -> CacheEntry | None:
         """
@@ -234,9 +230,7 @@ class ResultCache:
         """
         try:
             keys_to_remove = [
-                key
-                for key, entry in self._store.items()
-                if entry.metadata.tenant_id == tenant_id
+                key for key, entry in self._store.items() if entry.metadata.tenant_id == tenant_id
             ]
             for key in keys_to_remove:
                 del self._store[key]
@@ -259,9 +253,7 @@ class ResultCache:
         """Increment a tenant-specific statistic."""
         if tenant_id not in self._tenant_stats:
             self._tenant_stats[tenant_id] = {"hits": 0, "misses": 0}
-        self._tenant_stats[tenant_id][stat] = (
-            self._tenant_stats[tenant_id].get(stat, 0) + 1
-        )
+        self._tenant_stats[tenant_id][stat] = self._tenant_stats[tenant_id].get(stat, 0) + 1
 
     @property
     def size(self) -> int:

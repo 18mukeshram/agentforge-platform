@@ -6,13 +6,13 @@ API exceptions and error handling.
 Maps domain errors to HTTP responses with structured error bodies.
 """
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-class ErrorCode(str, Enum):
+class ErrorCode(StrEnum):
     """API error codes."""
 
     # Request errors (4xx)

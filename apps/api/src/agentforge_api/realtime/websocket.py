@@ -80,9 +80,7 @@ async def executions_websocket(
                 try:
                     data = json.loads(raw_data)
                 except json.JSONDecodeError:
-                    await connection.send_error(
-                        "Invalid JSON", {"received": raw_data[:100]}
-                    )
+                    await connection.send_error("Invalid JSON", {"received": raw_data[:100]})
                     continue
 
                 if not isinstance(data, dict):

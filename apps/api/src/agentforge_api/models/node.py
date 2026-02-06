@@ -2,7 +2,7 @@
 
 """Node domain models."""
 
-from enum import Enum
+from enum import StrEnum
 from typing import Annotated, Any, NewType
 
 from pydantic import BaseModel, Field
@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 NodeId = NewType("NodeId", str)
 
 
-class NodeType(str, Enum):
+class NodeType(StrEnum):
     """The category of node, determining its execution behavior."""
 
     AGENT = "agent"  # Executes an AI agent

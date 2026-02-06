@@ -32,6 +32,7 @@ class CamelModel(BaseModel):
         serialize_by_alias=True,
     )
 
+
 # === Workflow DTOs (existing) ===
 
 
@@ -51,9 +52,7 @@ class UpdateWorkflowRequest(BaseModel):
     description: str | None = None
     nodes: list[Node]
     edges: list[Edge]
-    version: int = Field(
-        ..., ge=1, description="Current version for optimistic locking"
-    )
+    version: int = Field(..., ge=1, description="Current version for optimistic locking")
 
 
 class WorkflowResponse(CamelModel):
@@ -205,8 +204,6 @@ class ResumeExecutionResponse(CamelModel):
     resumed_from_node_id: str = Field(description="Node ID resumed from")
     workflow_id: str
     workflow_version: int
-    skipped_nodes: list[str] = Field(
-        description="Nodes that will be skipped (already completed)"
-    )
+    skipped_nodes: list[str] = Field(description="Nodes that will be skipped (already completed)")
     rerun_nodes: list[str] = Field(description="Nodes that will be re-executed")
     status: ExecutionStatus = ExecutionStatus.PENDING

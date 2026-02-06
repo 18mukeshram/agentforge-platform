@@ -6,14 +6,14 @@ Integration test for execution flow.
 Tests the complete flow from workflow creation to execution.
 """
 
-import pytest
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from httpx import ASGITransport, AsyncClient
 
-from agentforge_api.main import app
 from agentforge_api.auth.dependencies import get_auth_context
 from agentforge_api.auth.models import AuthContext, Role
+from agentforge_api.main import app
 from agentforge_api.services.execution_service import execution_service
 from agentforge_api.services.orchestrator import orchestrator
 from agentforge_api.services.queue import job_queue
@@ -34,6 +34,7 @@ async def cleanup():
 @pytest.fixture
 async def client():
     """Create test client."""
+
     async def mock_get_auth_context() -> AuthContext:
         """Mock authenticated user."""
         return AuthContext(

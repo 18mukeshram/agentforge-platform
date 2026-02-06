@@ -24,9 +24,7 @@ def extract_token_from_header(
 
     parts = authorization.split(" ")
     if len(parts) != 2 or parts[0].lower() != "bearer":
-        raise UnauthorizedError(
-            "Invalid Authorization header format. Expected: Bearer <token>"
-        )
+        raise UnauthorizedError("Invalid Authorization header format. Expected: Bearer <token>")
 
     return parts[1]
 

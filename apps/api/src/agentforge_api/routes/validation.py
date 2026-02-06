@@ -111,9 +111,7 @@ async def validate_persisted_workflow(
     return ValidationResponse(
         valid=result.valid,
         errors=list(result.errors),
-        execution_order=(
-            list(result.execution_order) if result.execution_order else None
-        ),
+        execution_order=(list(result.execution_order) if result.execution_order else None),
     )
 
 
@@ -156,7 +154,5 @@ async def validate_workflow_payload(
     return ValidationResponse(
         valid=result.valid,
         errors=list(result.errors),
-        execution_order=(
-            list(result.execution_order) if result.execution_order else None
-        ),
+        execution_order=(list(result.execution_order) if result.execution_order else None),
     )

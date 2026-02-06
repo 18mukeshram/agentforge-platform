@@ -3,7 +3,7 @@
 """Execution domain models."""
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Annotated, Any, NewType
 
 from pydantic import BaseModel, Field
@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 ExecutionId = NewType("ExecutionId", str)
 
 
-class ExecutionStatus(str, Enum):
+class ExecutionStatus(StrEnum):
     """Overall execution status for the entire workflow run."""
 
     PENDING = "pending"  # Created, not yet started
@@ -21,7 +21,7 @@ class ExecutionStatus(str, Enum):
     CANCELLED = "cancelled"  # User-initiated cancellation
 
 
-class NodeExecutionStatus(str, Enum):
+class NodeExecutionStatus(StrEnum):
     """Execution status for a single node."""
 
     PENDING = "pending"  # Waiting for dependencies

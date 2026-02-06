@@ -64,9 +64,7 @@ def topological_sort(workflow: Workflow) -> TopologicalSortResult:
     in_degrees = compute_in_degrees(workflow)
 
     # Queue starts with all entry nodes (in-degree 0)
-    queue: list[str] = [
-        node_id for node_id, degree in in_degrees.items() if degree == 0
-    ]
+    queue: list[str] = [node_id for node_id, degree in in_degrees.items() if degree == 0]
 
     order: list[str] = []
 

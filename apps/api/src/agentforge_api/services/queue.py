@@ -115,7 +115,6 @@ class InMemoryQueue:
         """
         cancelled = 0
         for job in list(self._jobs.values()):
-
             if job.execution_id == execution_id and await self.cancel_job(job.id):
                 cancelled += 1
         return cancelled
@@ -184,9 +183,7 @@ class InMemoryQueue:
             # Update job with result
             if result.success:
                 completed_job = NodeJob(
-                    **running_job.model_dump(
-                        exclude={"status", "completed_at", "output"}
-                    ),
+                    **running_job.model_dump(exclude={"status", "completed_at", "output"}),
                     status=JobStatus.COMPLETED,
                     completed_at=datetime.now(UTC),
                     output=result.output,
@@ -195,9 +192,7 @@ class InMemoryQueue:
                 # Check if we should retry
                 if running_job.can_retry:
                     retry_job = NodeJob(
-                        **running_job.model_dump(
-                            exclude={"status", "retry_count", "started_at"}
-                        ),
+                        **running_job.model_dump(exclude={"status", "retry_count", "started_at"}),
                         status=JobStatus.PENDING,
                         retry_count=running_job.retry_count + 1,
                         started_at=None,
@@ -206,9 +201,7 @@ class InMemoryQueue:
 
                     # Re-queue with backoff
                     backoff_seconds = (
-                        running_job.retry_backoff_ms
-                        * (2**running_job.retry_count)
-                        / 1000
+                        running_job.retry_backoff_ms * (2**running_job.retry_count) / 1000
                     )
                     await asyncio.sleep(backoff_seconds)
                     self._queue.append(job.id)
@@ -216,9 +209,7 @@ class InMemoryQueue:
                 else:
                     # No more retries
                     completed_job = NodeJob(
-                        **running_job.model_dump(
-                            exclude={"status", "completed_at", "error"}
-                        ),
+                        **running_job.model_dump(exclude={"status", "completed_at", "error"}),
                         status=JobStatus.FAILED,
                         completed_at=datetime.now(UTC),
                         error=result.error,
@@ -255,9 +246,7 @@ class InMemoryQueue:
 
     async def drain(self) -> None:
         """Wait for all pending jobs to complete."""
-        while self._queue or any(
-            j.status == JobStatus.RUNNING for j in self._jobs.values()
-        ):
+        while self._queue or any(j.status == JobStatus.RUNNING for j in self._jobs.values()):
             await asyncio.sleep(0.01)
 
     def clear(self) -> None:

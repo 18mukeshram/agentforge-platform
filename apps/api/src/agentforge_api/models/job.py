@@ -3,7 +3,7 @@
 """Job models for execution queue."""
 
 from datetime import datetime
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import Any, NewType
 
 from pydantic import BaseModel, Field
@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 JobId = NewType("JobId", str)
 
 
-class JobStatus(str, Enum):
+class JobStatus(StrEnum):
     """Status of a job in the queue."""
 
     PENDING = "pending"

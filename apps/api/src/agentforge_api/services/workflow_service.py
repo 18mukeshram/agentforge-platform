@@ -205,11 +205,7 @@ class WorkflowService:
             status=existing.status,  # Will be updated after validation
             meta=WorkflowMeta(
                 name=name if name is not None else existing.meta.name,
-                description=(
-                    description
-                    if description is not None
-                    else existing.meta.description
-                ),
+                description=(description if description is not None else existing.meta.description),
                 created_at=existing.meta.created_at,
                 updated_at=now,
                 owner_id=existing.meta.owner_id,

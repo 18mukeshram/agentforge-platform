@@ -20,7 +20,6 @@ from agentforge_api.models import (
 )
 from agentforge_api.services.workflow_service import workflow_service
 
-
 # Use consistent IDs so frontend links work
 DEMO_TENANT_ID = "demo-tenant"
 DEMO_USER_ID = "demo-user"
@@ -29,7 +28,7 @@ DEMO_USER_ID = "demo-user"
 def seed_demo_data() -> None:
     """
     Seed demo workflows for development.
-    
+
     Called on server startup. Uses consistent IDs that match frontend links.
     """
     # Check if already seeded (avoid duplicates on hot reload)
@@ -69,7 +68,7 @@ def seed_demo_data() -> None:
         Edge(id="edge-1", source="input-1", target="agent-1"),
         Edge(id="edge-2", source="agent-1", target="output-1"),
     ]
-    
+
     wf1 = Workflow(
         id=wf1_id,
         status=WorkflowStatus.VALID,
@@ -84,7 +83,7 @@ def seed_demo_data() -> None:
         nodes=wf1_nodes,
         edges=wf1_edges,
     )
-    
+
     # Store directly (bypass validation since we know it's valid)
     workflow_service._workflows[wf1_id] = wf1
     workflow_service._workflow_tenants[wf1_id] = DEMO_TENANT_ID
@@ -126,7 +125,7 @@ def seed_demo_data() -> None:
         Edge(id="edge-4", source="tool-1", target="agent-2"),
         Edge(id="edge-5", source="agent-2", target="output-2"),
     ]
-    
+
     wf2 = Workflow(
         id=wf2_id,
         status=WorkflowStatus.VALID,
@@ -141,9 +140,8 @@ def seed_demo_data() -> None:
         nodes=wf2_nodes,
         edges=wf2_edges,
     )
-    
+
     workflow_service._workflows[wf2_id] = wf2
     workflow_service._workflow_tenants[wf2_id] = DEMO_TENANT_ID
 
     print(f"✅ Seeded {len(workflow_service._workflows)} demo workflows")
-

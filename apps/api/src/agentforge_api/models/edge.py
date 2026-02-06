@@ -25,15 +25,11 @@ class Edge(BaseModel, frozen=True):
 
     # Source node and port
     source: Annotated[str, Field(description="Node producing the data")]
-    source_port: Annotated[
-        str, Field(default="output", description="Output port on source node")
-    ]
+    source_port: Annotated[str, Field(default="output", description="Output port on source node")]
 
     # Target node and port
     target: Annotated[str, Field(description="Node consuming the data")]
-    target_port: Annotated[
-        str, Field(default="input", description="Input port on target node")
-    ]
+    target_port: Annotated[str, Field(default="input", description="Input port on target node")]
 
     @property
     def edge_id(self) -> EdgeId:

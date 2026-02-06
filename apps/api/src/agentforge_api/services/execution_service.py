@@ -223,9 +223,7 @@ class ExecutionService:
                     status=status,
                     started_at=started_at,
                     completed_at=completed_at,
-                    retry_count=(
-                        retry_count if retry_count is not None else state.retry_count
-                    ),
+                    retry_count=(retry_count if retry_count is not None else state.retry_count),
                     error=error,
                     output=output,
                 )
@@ -342,10 +340,7 @@ class ExecutionService:
             if node.id in skipped_nodes:
                 # Copy completed state from parent
                 parent_state = parent_state_map.get(node.id)
-                if (
-                    parent_state
-                    and parent_state.status == NodeExecutionStatus.COMPLETED
-                ):
+                if parent_state and parent_state.status == NodeExecutionStatus.COMPLETED:
                     node_states.append(
                         NodeExecutionState(
                             node_id=node.id,

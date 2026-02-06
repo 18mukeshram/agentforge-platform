@@ -268,9 +268,7 @@ class ExecutionOrchestrator:
         skipped_nodes = [
             n for n, s in state_map.items() if s.status == NodeExecutionStatus.COMPLETED
         ]
-        rerun_nodes = [
-            n for n, s in state_map.items() if s.status == NodeExecutionStatus.PENDING
-        ]
+        rerun_nodes = [n for n, s in state_map.items() if s.status == NodeExecutionStatus.PENDING]
 
         # Emit RESUME_START event (Phase 12.3)
         await event_emitter.emit(
@@ -462,8 +460,7 @@ class ExecutionOrchestrator:
 
             dep_dependencies = plan.dependencies.get(dep_id, [])
             all_deps_complete = all(
-                state_map.get(d)
-                and state_map.get(d).status == NodeExecutionStatus.COMPLETED
+                state_map.get(d) and state_map.get(d).status == NodeExecutionStatus.COMPLETED
                 for d in dep_dependencies
             )
 

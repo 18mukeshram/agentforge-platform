@@ -2,7 +2,7 @@
 
 """Agent domain models."""
 
-from enum import Enum
+from enum import StrEnum
 from typing import Annotated, Any, NewType
 
 from pydantic import BaseModel, Field
@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 AgentId = NewType("AgentId", str)
 
 
-class DataType(str, Enum):
+class DataType(StrEnum):
     """Primitive types supported for agent inputs/outputs."""
 
     STRING = "string"
@@ -41,7 +41,7 @@ class AgentOutputSchema(BaseModel, frozen=True):
     ports: list[PortSchema] = Field(default_factory=list)
 
 
-class AgentCategory(str, Enum):
+class AgentCategory(StrEnum):
     """Agent category for organization and filtering."""
 
     LLM = "llm"  # Language model invocation

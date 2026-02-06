@@ -96,12 +96,8 @@ class ConnectionHub:
 
     def __init__(self) -> None:
         self._connections: dict[str, Connection] = {}
-        self._execution_subscribers: dict[str, set[str]] = (
-            {}
-        )  # execution_id -> connection_ids
-        self._execution_tenants: dict[str, str] = (
-            {}
-        )  # execution_id -> tenant_id (cached)
+        self._execution_subscribers: dict[str, set[str]] = {}  # execution_id -> connection_ids
+        self._execution_tenants: dict[str, str] = {}  # execution_id -> tenant_id (cached)
         self._lock = asyncio.Lock()
         self._emitter_unsubscribe: callable | None = None
 
@@ -193,9 +189,7 @@ class ConnectionHub:
             execution_tenant = execution_service.get_tenant_id(execution_id)
 
             if execution_tenant is None:
-                await connection.send_error(
-                    "Execution not found", {"executionId": execution_id}
-                )
+                await connection.send_error("Execution not found", {"executionId": execution_id})
                 return False
 
             # Cache for future checks
@@ -255,9 +249,7 @@ class ConnectionHub:
         Routes event to all connections subscribed to this execution.
         """
         async with self._lock:
-            subscriber_ids = self._execution_subscribers.get(
-                event.execution_id, set()
-            ).copy()
+            subscriber_ids = self._execution_subscribers.get(event.execution_id, set()).copy()
 
         if not subscriber_ids:
             return
@@ -302,17 +294,13 @@ class ConnectionHub:
 
         if action == "subscribe":
             if not execution_id:
-                await connection.send_error(
-                    "Missing 'executionId' field", {"action": action}
-                )
+                await connection.send_error("Missing 'executionId' field", {"action": action})
                 return
             await self.subscribe(connection, execution_id)
 
         elif action == "unsubscribe":
             if not execution_id:
-                await connection.send_error(
-                    "Missing 'executionId' field", {"action": action}
-                )
+                await connection.send_error("Missing 'executionId' field", {"action": action})
                 return
             await self.unsubscribe(connection, execution_id)
 
@@ -330,9 +318,7 @@ class ConnectionHub:
     @property
     def subscription_count(self) -> int:
         """Total number of active subscriptions."""
-        return sum(
-            len(subscribers) for subscribers in self._execution_subscribers.values()
-        )
+        return sum(len(subscribers) for subscribers in self._execution_subscribers.values())
 
 
 # Singleton instance

@@ -3,7 +3,7 @@
 """Authentication and authorization models."""
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import NewType
 
 from pydantic import BaseModel
@@ -12,7 +12,7 @@ TenantId = NewType("TenantId", str)
 UserId = NewType("UserId", str)
 
 
-class Role(str, Enum):
+class Role(StrEnum):
     """User roles with hierarchical permissions."""
 
     OWNER = "OWNER"  # Full access (tenant admin)

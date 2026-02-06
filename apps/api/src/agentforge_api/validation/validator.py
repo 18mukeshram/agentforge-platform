@@ -102,9 +102,7 @@ def validate_workflow(
 
     if options.agent_registry is not None:
         # M1: Type compatibility
-        if collect_errors(
-            validate_type_compatibility(workflow, options.agent_registry)
-        ):
+        if collect_errors(validate_type_compatibility(workflow, options.agent_registry)):
             return ValidationResult.failure(all_errors)
 
         # M2: Required inputs satisfied

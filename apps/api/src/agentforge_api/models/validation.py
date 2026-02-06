@@ -2,13 +2,13 @@
 
 """Validation result models."""
 
-from enum import Enum
+from enum import StrEnum
 from typing import Annotated
 
 from pydantic import BaseModel, Field
 
 
-class ValidationErrorCode(str, Enum):
+class ValidationErrorCode(StrEnum):
     """Categories of validation errors."""
 
     # Structural (S1-S5)
@@ -29,12 +29,8 @@ class ValidationError(BaseModel, frozen=True):
     code: ValidationErrorCode
     message: str
 
-    node_ids: Annotated[
-        list[str], Field(default_factory=list, description="Affected node(s)")
-    ]
-    edge_ids: Annotated[
-        list[str], Field(default_factory=list, description="Affected edge(s)")
-    ]
+    node_ids: Annotated[list[str], Field(default_factory=list, description="Affected node(s)")]
+    edge_ids: Annotated[list[str], Field(default_factory=list, description="Affected edge(s)")]
 
 
 class ValidationResult(BaseModel, frozen=True):

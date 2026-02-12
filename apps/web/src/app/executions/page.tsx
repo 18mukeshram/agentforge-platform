@@ -5,7 +5,7 @@
  * Shows all executions with pagination, filtering, and search.
  */
 
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAllExecutions } from "@/hooks";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,25 @@ import { cn } from "@/lib/utils";
 const PAGE_SIZE = 10;
 const STATUS_OPTIONS = ["all", "pending", "running", "completed", "failed", "cancelled"] as const;
 
+// Loading fallback for Suspense
+function ExecutionsLoadingFallback() {
+  return (
+    <div className="flex min-h-screen items-center justify-center">
+      <div className="h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-primary" />
+    </div>
+  );
+}
+
+// Main page wrapper with Suspense boundary
 export default function ExecutionsPage() {
+  return (
+    <Suspense fallback={<ExecutionsLoadingFallback />}>
+      <ExecutionsPageContent />
+    </Suspense>
+  );
+}
+
+function ExecutionsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 

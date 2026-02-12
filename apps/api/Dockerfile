@@ -25,12 +25,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-COPY pyproject.toml ./
-
-# Create virtual environment and install dependencies
+# Create virtual environment
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
+
+# Install Python dependencies
+# Copy both pyproject.toml AND source code (hatchling needs src/ to build)
+COPY pyproject.toml ./
+COPY src/ ./src/
 
 RUN pip install --upgrade pip && \
     pip install .
@@ -61,11 +63,8 @@ RUN groupadd --gid 1000 appgroup && \
 
 WORKDIR /app
 
-# Copy virtual environment from builder
+# Copy virtual environment from builder (includes installed agentforge_api package)
 COPY --from=builder /opt/venv /opt/venv
-
-# Copy application code
-COPY src/ ./src/
 
 # Set ownership
 RUN chown -R appuser:appgroup /app
@@ -77,7 +76,7 @@ USER appuser
 EXPOSE 8000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
 
 # Run the application

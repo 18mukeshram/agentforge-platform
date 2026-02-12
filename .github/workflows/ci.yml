@@ -210,6 +210,9 @@ jobs:
             echo "Attempt $i: API not ready yet..."
             sleep 2
           done
+          # Show container logs for debugging
+          echo "--- Container Logs ---"
+          docker logs api-test 2>&1 | tail -50
 
       - name: Check health endpoint
         run: |
